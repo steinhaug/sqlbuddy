@@ -1,0 +1,26 @@
+{
+    "name": "steinhaug/sqlbuddy",
+    "description": "My personal SQL friend",
+    "homepage": "http://kim.steinhaug.com",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Kim Steinhaug",
+            "email": "kim@steinhaug.com",
+            "homepage": "http://kim.steinhaug.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0"
+    },
+    "require-dev": {},
+    "autoload": {
+        "psr-0": {"sqlbuddy": ""}
+    },
+    "autoload-dev": {
+        "psr-0": {
+            "testsqlbuddy": "test/"
+        }
+    }
+}
