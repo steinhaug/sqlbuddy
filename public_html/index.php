@@ -85,6 +85,8 @@ echo '<br>';
 echo $sql->flush();
 $sql->que('first','Kim');
 $sql->que('last','Steinhaug');
+$sql->que('age',44,'int');
+
 
 echo $sql->build('INSERT','demo') . BR;
 echo $sql->build('UPDATE','demo','id=1') . BR;

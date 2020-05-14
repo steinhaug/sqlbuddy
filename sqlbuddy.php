@@ -1,6 +1,16 @@
 <?php
 
+
+/**
+ * My personal SQL friend, making sure insert's and update's doesnt mess anything up.
+ * 
+ * (c) Kim Steinhaug
+ * http://steinhaug.no/
+ * 
+ */
 class sqlbuddy {
+
+    const version = '1.0.0';
 
     private $keys  = [];
     private $vals  = [];
@@ -9,8 +19,6 @@ class sqlbuddy {
 
     private $safehtml = false;
     private $lb_mode = false;
-
-    const version = '1.0.0';
 
     public function __construct(){
     }
@@ -52,6 +60,10 @@ class sqlbuddy {
         return false;
     }
 
+    public function count_keys(){
+        return count($this->keys);
+    }
+
     public function que($k,$v,$i='string',$n='NO'){
     
         if( mb_strpos($i,':')!==false ){
@@ -67,6 +79,155 @@ class sqlbuddy {
         array_push($this->vals,     $v);
         array_push($this->ints,     $i);
         array_push($this->nulls,    $this->is_nullable($n));
+    }
+
+    /**
+     * Alias of que
+     */
+    public function push($k,$v,$i='string',$n='NO'){
+    
+        if( mb_strpos($i,':')!==false ){
+            $tmp = explode(':',$i);
+            $i = $tmp[0];
+            $len = (int) $tmp[1];
+            if( $len AND mb_strlen($v) AND (mb_strlen($v) > $len) ){
+                $v = mb_substr($v,0,$len);
+            }
+        }
+
+        array_push($this->keys,     $k);
+        array_push($this->vals,     $v);
+        array_push($this->ints,     $i);
+        array_push($this->nulls,    $this->is_nullable($n));
+    }
+
+    public function post($k, $v, $mode, $null_enabled=false){
+
+        $string_max_length = 0;
+        if( mb_strpos($mode,':')!==false ){
+            $tmp = explode(':',$mode);
+            $mode = $tmp[0];
+            $string_max_length = (int) $tmp[1];
+        }
+
+        switch ($mode) {
+            case 'checkbox':
+                if( !isset($_POST[$v]) OR (isset($_POST[$v]) AND !$_POST[$v]) ){
+                    if($null_enabled){
+                        array_push($this->keys, $k);
+                        array_push($this->vals, 'null');
+                        array_push($this->ints, 'raw');
+                        array_push($this->nulls, true);
+                        break;
+                    } else {
+                        array_push($this->keys, $k);
+                        array_push($this->vals, 0);
+                        array_push($this->ints, 'int');
+                        array_push($this->nulls, false);
+                        break;
+                    }
+                }
+                array_push($this->keys, $k);
+                array_push($this->vals, 1);
+                array_push($this->ints, 'int');
+                array_push($this->nulls, false);
+                break;
+            case 'str':
+            case 'string':
+            case 'text':
+            case 'input':
+                if( !isset($_POST[$v]) OR (isset($_POST[$v]) AND (strlen($_POST[$v]) == 0)) ){
+                    if($null_enabled){
+                        array_push($this->keys, $k);
+                        array_push($this->vals, 'null');
+                        array_push($this->ints, 'raw');
+                        array_push($this->nulls, true);
+                        break;
+                    } else {
+                        array_push($this->keys, $k);
+                        array_push($this->vals, '');
+                        array_push($this->ints, 'string');
+                        array_push($this->nulls, false);
+                        break;
+                    }
+                }
+                if($null_enabled AND $this->considered_null($_POST[$v])){
+                    array_push($this->keys, $k);
+                    array_push($this->vals, 'null');
+                    array_push($this->ints, 'raw');
+                    array_push($this->nulls, true);
+                    break;
+                } else {
+                    if($string_max_length){
+                        $_POST[$v] = mb_substr($_POST[$v],0,$string_max_length);
+                    }
+                    array_push($this->keys, $k);
+                    array_push($this->vals, $_POST[$v]);
+                    array_push($this->ints, 'string');
+                    array_push($this->nulls, false);
+                    break;
+                }
+                break;
+            case 'int':
+                if( !isset($_POST[$v]) ){
+                    if($null_enabled){
+                        array_push($this->keys, $k);
+                        array_push($this->vals, 'null');
+                        array_push($this->ints, 'raw');
+                        array_push($this->nulls, true);
+                        break;
+                    } else {
+                        array_push($this->keys, $k);
+                        array_push($this->vals, 0);
+                        array_push($this->ints, 'int');
+                        array_push($this->nulls, false);
+                        break;
+                    }
+                }
+                if($null_enabled AND $this->considered_null($_POST[$v])){
+                    array_push($this->keys, $k);
+                    array_push($this->vals, 'null');
+                    array_push($this->ints, 'raw');
+                    array_push($this->nulls, true);
+                    break;
+                } else {
+                    if( !is_numeric($_POST[$v]) ){
+                        logerror('sqlbuddy post mode int, not numeric: ' . htmlentities($_POST[$v]));
+                    }
+                    array_push($this->keys, $k);
+                    array_push($this->vals, $_POST[$v]);
+                    array_push($this->ints, 'int');
+                    array_push($this->nulls, false);
+                    break;
+                }
+                break;
+            case 'column':
+            case 'col':
+                    array_push($this->keys, $k);
+                    array_push($this->vals, $_POST[$v]);
+                    array_push($this->ints, 'column');
+                    array_push($this->nulls, false);
+                    break;
+                default:
+                logerror('sqlbuddy post mode does not exist: ' . $mode);
+                if( !isset($_POST[$v]) ){
+                    if($null_enabled){
+                        array_push($this->keys, $k);
+                        array_push($this->vals, 'null');
+                        array_push($this->ints, 'raw');
+                        array_push($this->nulls, true);
+                        break;
+                    } else {
+                        array_push($this->keys, $k);
+                        array_push($this->vals, '');
+                        array_push($this->ints, 'string');
+                        array_push($this->nulls, false);
+                        break;
+                    }
+                }
+                break;
+        }
+
     }
 
     public function status(){
@@ -435,10 +596,12 @@ class sqlbuddy {
             $k = str_replace(',','/',$k);
             $k = str_replace(' ','/',$k);
             $k = str_replace('-','/',$k);
+
             // If no slash probably a number,
             // so we failsafe atleast 0000-00-00
             if(!preg_match('/\//',$k))
                 return '0000-00-00';
+
             $t = explode('/',$k);
             if(count($t) != 3)
                 return '0000-00-00';
