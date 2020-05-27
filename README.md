@@ -46,7 +46,7 @@ Boolean statment for the value being considered a NULL, in which the insert or u
 
 Install the [composer package](https://packagist.org/packages/steinhaug/sqlbuddy):
 
-    > composer require steinhaug/mysqlbuddy
+    > composer require steinhaug/sqlbuddy
 
 Or download the [latest release](https://github.com/steinhaug/sqlbuddy/releases/latest) and include sqlbuddy.php.
 
