@@ -583,6 +583,9 @@ class sqlbuddy {
         $del = '-';
         $k = trim($k);
 
+        if(strpos($k, 'T')!==false)
+            $k = str_replace('T',' ',$k);
+
         if($action=='fix'){
             // If we have 0000-00-00 00:00:00 we need to remove the time
             if(preg_match('/:/',$k)){ // I expect there to be a space between date and time
