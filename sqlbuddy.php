@@ -10,7 +10,7 @@
  */
 class sqlbuddy {
 
-    const version = '1.0.1';
+    const version = '1.0.2';
 
     private $keys  = [];
     private $vals  = [];
@@ -338,7 +338,7 @@ class sqlbuddy {
                             $output .= "'" . $this->sloppydate($this->vals[$i],'sql') . "'";
                         break;
                     case 'dateornull':
-                        if(empty($this->vals[$i])){
+                        if($this->considered_null( $this->vals[$i] )){
                             $output .= "NULL";
                         } else if($this->vals[$i] == '0000-00-00'){
                             $output .= "NULL";
@@ -353,7 +353,7 @@ class sqlbuddy {
                             $output .= "'" . $this->sloppydate($this->vals[$i],'sql') . ' ' . $this->sloppydate($this->vals[$i],'datetime2time') . "'";
                         break;
                     case 'datetimeornull':
-                        if(empty($this->vals[$i])){
+                        if($this->considered_null( $this->vals[$i] )){
                             $output .= "NULL";
                         } else {
                             $output .= "'" . $this->sloppydate($this->vals[$i],'sql') . ' ' . $this->sloppydate($this->vals[$i],'datetime2time') . "'";
@@ -466,7 +466,7 @@ class sqlbuddy {
                             $output .= "'" . $this->sloppydate($this->vals[$i],'sql') . "'";
                         break;
                     case 'dateornull':
-                        if(empty($this->vals[$i])){
+                        if($this->considered_null( $this->vals[$i] )){
                             $output .= "NULL";
                         } else if($this->vals[$i] == '0000-00-00'){
                             $output .= "NULL";
@@ -481,7 +481,7 @@ class sqlbuddy {
                             $output .= "'" . $this->sloppydate($this->vals[$i],'sql') . ' ' . $this->sloppydate($this->vals[$i],'datetime2time') . "'";
                         break;
                     case 'datetimeornull':
-                        if(empty($this->vals[$i])){
+                        if($this->considered_null( $this->vals[$i] )){
                             $output .= "NULL";
                         } else {
                             $output .= "'" . $this->sloppydate($this->vals[$i],'sql') . ' ' . $this->sloppydate($this->vals[$i],'datetime2time') . "'";
