@@ -4,11 +4,43 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
+v1.1.1 - Updated 20 aug 2021
+
+\* rewrote parsing logic, now all parsing will assume: col, val, type, has_null  
+\+ Typical values as NULL and NOW() will automatically get set without quotes, automagically.  
+
+v1.0.2 - Updated 2 mai 2021
+
+\* Better handling of NULL.
+
+v1.0.1 - Updated 27 mai 2020
+
+\+ Any type can be forcefully cut on given length by adding suffix :n. Example: string:128 will be a string cut to 128 characters max.
+
 v1.0.0 - Updated 14 may 2020
 
 ## USAGE
 
-Example of usage, with basic features out of the box:
+**Syntax:**
+
+    $sql->que($k, $v, ?$t, ?$n);  
+
+$k = DB Column,  
+$v = Value,  
+$t = optional - Variable type, int string float etc.  
+$n = optional - (bool) has_null. If true evaluates $v as NULL when appropriate  
+
+**Specials**
+
+When using 3'rd param as true, 3 params only:
+
+    $sql->que($k, $v, true);  
+
+Will evaluate as:
+
+    $sql->que($k, $v, 'string', true);  
+
+**Example of usage, with basic features out of the box:**
 
     $sql = new sqlbuddy;  
     $sql->que('first','Kim Stalsberg');  
@@ -17,7 +49,7 @@ Example of usage, with basic features out of the box:
     echo $sql->build('update','users','id=1');  
     echo $sql->build('insert','users');
 
-Outputs:  
+**Outputs:**  
 
     UPDATE `users` SET `first`='Kim', `last`='Steinhaug', `age`=44 WHERE id=1;
     INSERT INTO `demo` (`first`, `last`, `age`) VALUES ('Kim', 'Steinhaug', 44)
