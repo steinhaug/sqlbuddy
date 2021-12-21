@@ -1,116 +1,136 @@
 <?php
-
-
 /**
  * My personal SQL friend, making sure insert's and update's doesnt mess anything up.
- * 
+ *
  * (c) Kim Steinhaug
  * http://steinhaug.no/
- * 
+ *
  */
-class sqlbuddy {
+class sqlbuddy
+{
+    public const version = '1.2.0'; // PHP80
 
-    const version = '1.1.1';
-
-    private $keys  = [];
-    private $vals  = [];
-    private $ints  = [];
+    private $keys = [];
+    private $vals = [];
+    private $ints = [];
     private $nulls = [];
 
     private $safehtml = false;
     private $lb_mode = false;
 
-    public function __construct(){
+    public function __construct()
+    {
     }
 
-    public function flush(){
-        $this->keys  = [];
-        $this->vals  = [];
-        $this->ints  = [];
+    public function flush()
+    {
+        $this->keys = [];
+        $this->vals = [];
+        $this->ints = [];
         $this->nulls = [];
     }
 
     // logical statement - does this column have a NULL posiibility
-    public function is_nullable($var){
-
-        if($var === true)
+    public function is_nullable($var)
+    {
+        if ($var === true) {
             return true;
+        }
 
-        if($var === false)
+        if ($var === false) {
             return false;
+        }
 
         $var = strtolower($var);
 
-        if($var == 'yes')
+        if ($var == 'yes') {
             return true;
+        }
 
         return false;
     }
 
     // values expected to translate as a NULL.
-    public function considered_null($val){
-
-        if( $val === false)
+    public function considered_null($val)
+    {
+        if ($val === false) {
             return true;
+        }
 
-        if( !strlen($val) )
+        if (!strlen($val)) {
             return true;
+        }
 
-        if( strtolower($val) === 'null')
+        if (strtolower($val) === 'null') {
             return true;
+        }
 
         return false;
     }
 
     // Invalid SQL formatted dates and datetimes that translates to NULL or empty value
-    public function considered_null_datetime($val){
-
-        if( $val == '0000-00-00 0:0:0' )
+    public function considered_null_datetime($val)
+    {
+        if ($val == '0000-00-00 0:0:0') {
             return true;
+        }
 
-        if( $val == '0000-00-00 00:00:00' )
+        if ($val == '0000-00-00 00:00:00') {
             return true;
+        }
 
-        if( $val == '0000-00-00' )
+        if ($val == '0000-00-00') {
             return true;
+        }
 
-        if( $val == '0000-00-00' )
+        if ($val == '0000-00-00') {
             return true;
+        }
 
         return false;
-
     }
 
-    public function considered_mysql_raw_value($val){
-
-        if( $val === 'NULL' )
+    public function considered_mysql_raw_value($val)
+    {
+        if ($val === 'NULL') {
             return true;
+        }
 
         return false;
-
     }
 
-    public function considered_mysql_raw__date($val){
-
-        if( $val === 'NOW()' )
+    public function considered_mysql_raw__date($val)
+    {
+        if ($val === 'NOW()') {
             return true;
+        }
 
         return false;
-
     }
 
-    public function count_keys(){
+    public function count_keys()
+    {
         return count($this->keys);
     }
 
-    public function que($k,$v,$i='autostring',$n='autoNO'){
-    
-        if( mb_strpos($i,':')!==false ){
-            $tmp = explode(':',$i);
+    /**
+     * Main way of adding data to be updated
+     *
+     * @param [type] $k
+     * @param [type] $v
+     * @param string $i
+     * @param string $n
+     *
+     * @return void
+     */
+    public function que($k, $v, $i = 'autostring', $n = 'autoNO')
+    {
+        if (mb_strpos($i, ':') !== false) {
+            $tmp = explode(':', $i);
             $i = $tmp[0];
             $len = (int) $tmp[1];
-            if( $len AND mb_strlen($v) AND (mb_strlen($v) > $len) ){
-                $v = mb_substr($v,0,$len);
+            if ($len and mb_strlen($v) and (mb_strlen($v) > $len)) {
+                $v = mb_substr($v, 0, $len);
             }
         }
 
@@ -119,46 +139,50 @@ class sqlbuddy {
             $n = true;
         }
 
-
-        array_push($this->keys,     $k);
-        array_push($this->vals,     $v);
-        array_push($this->ints,     $i);
-        array_push($this->nulls,    $this->is_nullable($n));
+        array_push($this->keys, $k);
+        array_push($this->vals, $v);
+        array_push($this->ints, $i);
+        array_push($this->nulls, $this->is_nullable($n));
     }
 
     /**
-     * Alias of que
+     * Alias of ->que()
+     *
+     * @param [type] $k
+     * @param [type] $v
+     * @param string $i
+     * @param string $n
+     *
+     * @return void
      */
-    public function push($k,$v,$i='string',$n='NO'){
-    
-        if( mb_strpos($i,':')!==false ){
-            $tmp = explode(':',$i);
-            $i = $tmp[0];
-            $len = (int) $tmp[1];
-            if( $len AND mb_strlen($v) AND (mb_strlen($v) > $len) ){
-                $v = mb_substr($v,0,$len);
-            }
-        }
-
-        array_push($this->keys,     $k);
-        array_push($this->vals,     $v);
-        array_push($this->ints,     $i);
-        array_push($this->nulls,    $this->is_nullable($n));
+    public function push($k, $v, $i = 'autostring', $n = 'autoNO')
+    {
+        return $this->que($k, $v, $i, $n);
     }
 
-    public function post($k, $v, $mode, $null_enabled=false){
-
+    /**
+     * _POST friendly ->que() with spesific hjelpers 
+     *
+     * @param [type] $k
+     * @param [type] $v
+     * @param [type] $mode
+     * @param bool $null_enabled
+     *
+     * @return void
+     */
+    public function post($k, $v, $mode, $null_enabled = false)
+    {
         $string_max_length = 0;
-        if( mb_strpos($mode,':')!==false ){
-            $tmp = explode(':',$mode);
+        if (mb_strpos($mode, ':') !== false) {
+            $tmp = explode(':', $mode);
             $mode = $tmp[0];
             $string_max_length = (int) $tmp[1];
         }
 
         switch ($mode) {
             case 'checkbox':
-                if( !isset($_POST[$v]) OR (isset($_POST[$v]) AND !$_POST[$v]) ){
-                    if($null_enabled){
+                if (!isset($_POST[$v]) or (isset($_POST[$v]) and !$_POST[$v])) {
+                    if ($null_enabled) {
                         array_push($this->keys, $k);
                         array_push($this->vals, 'null');
                         array_push($this->ints, 'raw');
@@ -181,8 +205,8 @@ class sqlbuddy {
             case 'string':
             case 'text':
             case 'input':
-                if( !isset($_POST[$v]) OR (isset($_POST[$v]) AND (strlen($_POST[$v]) == 0)) ){
-                    if($null_enabled){
+                if (!isset($_POST[$v]) or (isset($_POST[$v]) and (strlen($_POST[$v]) == 0))) {
+                    if ($null_enabled) {
                         array_push($this->keys, $k);
                         array_push($this->vals, 'null');
                         array_push($this->ints, 'raw');
@@ -196,15 +220,15 @@ class sqlbuddy {
                         break;
                     }
                 }
-                if($null_enabled AND $this->considered_null($_POST[$v])){
+                if ($null_enabled and $this->considered_null($_POST[$v])) {
                     array_push($this->keys, $k);
                     array_push($this->vals, 'null');
                     array_push($this->ints, 'raw');
                     array_push($this->nulls, true);
                     break;
                 } else {
-                    if($string_max_length){
-                        $_POST[$v] = mb_substr($_POST[$v],0,$string_max_length);
+                    if ($string_max_length) {
+                        $_POST[$v] = mb_substr($_POST[$v], 0, $string_max_length);
                     }
                     array_push($this->keys, $k);
                     array_push($this->vals, $_POST[$v]);
@@ -214,8 +238,8 @@ class sqlbuddy {
                 }
                 break;
             case 'int':
-                if( !isset($_POST[$v]) ){
-                    if($null_enabled){
+                if (!isset($_POST[$v])) {
+                    if ($null_enabled) {
                         array_push($this->keys, $k);
                         array_push($this->vals, 'null');
                         array_push($this->ints, 'raw');
@@ -229,14 +253,14 @@ class sqlbuddy {
                         break;
                     }
                 }
-                if($null_enabled AND $this->considered_null($_POST[$v])){
+                if ($null_enabled and $this->considered_null($_POST[$v])) {
                     array_push($this->keys, $k);
                     array_push($this->vals, 'null');
                     array_push($this->ints, 'raw');
                     array_push($this->nulls, true);
                     break;
                 } else {
-                    if( !is_numeric($_POST[$v]) ){
+                    if (!is_numeric($_POST[$v])) {
                         logerror('sqlbuddy post mode int, not numeric: ' . htmlentities($_POST[$v]));
                     }
                     array_push($this->keys, $k);
@@ -255,8 +279,8 @@ class sqlbuddy {
                     break;
                 default:
                 logerror('sqlbuddy post mode does not exist: ' . $mode);
-                if( !isset($_POST[$v]) ){
-                    if($null_enabled){
+                if (!isset($_POST[$v])) {
+                    if ($null_enabled) {
                         array_push($this->keys, $k);
                         array_push($this->vals, 'null');
                         array_push($this->ints, 'raw');
@@ -272,54 +296,56 @@ class sqlbuddy {
                 }
                 break;
         }
-
     }
 
-    public function status(){
-        if(count($this->keys))
+
+    public function status()
+    {
+        if (count($this->keys)) {
             return true;
-            else
+        } else {
             return false;
+        }
     }
 
-    public function output($m){
+    public function output($m)
+    {
         global $mysqli;
 
-        if($this->safehtml){
-            require_once $GLOBALS['serverpaths']['ecms.lib'] . '/index.HTMLSax3.cleanup.php';
+        if ($this->safehtml) {
+            // We should add some safehtml logic here
         }
 
         $output = '';
-        if($m=='keys'){
-
-            for($i=0;$i<count($this->keys);$i++){
-                if($i)
+        if ($m == 'keys') {
+            for ($i = 0;$i < count($this->keys);$i++) {
+                if ($i) {
                     $output .= ', ';
+                }
                 $output .= '`' . $this->keys[$i] . '`';
             }
-
-        } else if($m=='values'){
-
-            for($i=0;$i<count($this->vals);$i++){
-
-                if($i) $output .= ', ';
-                if($this->safehtml){ // XSS_FIX
-                    $safehtml = new safehtml();
-                    $this->vals[$i] = $safehtml->parse($this->vals[$i]);
-                    unset($safehtml);
+        } elseif ($m == 'values') {
+            for ($i = 0;$i < count($this->vals);$i++) {
+                if ($i) {
+                    $output .= ', ';
+                }
+                if ($this->safehtml) { // XSS_FIX
+                    // Data to process, $this->vals[$i]
+                    // We should add some safehtml logic here
                 }
 
-                // If the detection fails, we re-detect with a different set of encodings to check for 
+                // If the detection fails, we re-detect with a different set of encodings to check for
                 $from = mb_detect_encoding($this->vals[$i]);
-                if( $from === false ){
+                if ($from === false) {
                     $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
                 }
-                if($from != 'UTF-8')
+                if ($from != 'UTF-8') {
                     $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
+                }
 
                 // Make ornull fields use the nulls[]
                 if ((mb_strlen($this->ints[$i]) > 8) and (substr($this->ints[$i], -6) == 'ornull')) {
-                    $this->ints[$i] = substr($this->ints[$i],0, -6);
+                    $this->ints[$i] = substr($this->ints[$i], 0, -6);
                     $this->nulls[$i] = true;
                 }
                 if ($this->ints[$i] == 'ornull') {
@@ -337,7 +363,7 @@ class sqlbuddy {
                         case 'autostring':
                             if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if( $this->nulls[$i] AND empty($this->vals[$i]) ){
+                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
@@ -345,48 +371,50 @@ class sqlbuddy {
                             break;
                         case 'int':
                         case 'tinyint':
-                            if($this->vals[$i] === 0){
+                            if ($this->vals[$i] === 0) {
                                 $output .= (int) $this->vals[$i];
-                            } else if($this->vals[$i] === '0'){
+                            } elseif ($this->vals[$i] === '0') {
                                 $output .= (int) $this->vals[$i];
-                            } else if($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
+                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if ($this->nulls[$i] and empty($this->vals[$i])) {
+                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $output .= (int) $this->vals[$i];
                             }
                             break;
                         case 'float':
-                            if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) )
+                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                                else
-                                $output .= "'" . (float) $this->make_number($this->vals[$i]) . "'";
+                            } else {
+                                    $output .= "'" . (float) $this->make_number($this->vals[$i]) . "'";
+                                }
                             break;
                         case 'dec':
                         case 'decimal':
-                            if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) )
+                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                                else
-                                $output .= $this->make_number($this->vals[$i]);
+                            } else {
+                                    $output .= $this->make_number($this->vals[$i]);
+                                }
                             break;
                         case 'date':
                             if ($this->considered_mysql_raw__date($this->vals[$i])) {
                                 $output .= $this->vals[$i];
-                            } else if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if( $this->nulls[$i] AND $this->considered_null_datetime( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $output .= "'" . $this->sloppydate($this->vals[$i], 'sql') . "'";
                             }
                             break;
                         case 'datetime':
-                            if ( $this->considered_mysql_raw__date($this->vals[$i]) ) {
+                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
                                 $output .= $this->vals[$i];
-                            } else if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if( $this->nulls[$i] AND $this->considered_null_datetime( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $output .= "'" . $this->sloppydate($this->vals[$i], 'sql') . ' ' . $this->sloppydate($this->vals[$i], 'datetime2time') . "'";
@@ -396,15 +424,16 @@ class sqlbuddy {
                             $output .= $this->vals[$i];
                             break;
                         case 'boolean':
-                            if( $this->_bool($this->vals[$i]) )
+                            if ($this->_bool($this->vals[$i])) {
                                 $output .= 1;
-                                else
-                                $output .= 0;
+                            } else {
+                                    $output .= 0;
+                                }
                             break;
                         case 'email':
                             if (filter_var($this->vals[$i], FILTER_VALIDATE_EMAIL)) {
                                 $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
-                            } else if($this->nulls[$i]){
+                            } elseif ($this->nulls[$i]) {
                                 $output .= "NULL";
                             } else {
                                 $output .= "''";
@@ -420,31 +449,32 @@ class sqlbuddy {
                     }
                 }
             }
-        } else if($m=='set'){
-
-            for($i=0;$i<count($this->keys);$i++){
-
-                if($this->lb_mode AND $i) $output .= ', ' . "\n";
-                else if($i) $output .= ', ';
+        } elseif ($m == 'set') {
+            for ($i = 0;$i < count($this->keys);$i++) {
+                if ($this->lb_mode and $i) {
+                    $output .= ', ' . "\n";
+                } elseif ($i) {
+                    $output .= ', ';
+                }
 
                 $output .= '`' . $this->keys[$i] . '`';
                 $output .= '=';
-                if($this->safehtml){ // XSS_FIX
-                    $safehtml = new safehtml();
-                    $this->vals[$i] = $safehtml->parse($this->vals[$i]);
-                    unset($safehtml);
+                if ($this->safehtml) { // XSS_FIX
+                    // Data to process, $this->vals[$i]
+                    // We should add some safehtml logic here
                 }
 
                 $from = mb_detect_encoding($this->vals[$i]);
-                if( $from === false ){
+                if ($from === false) {
                     $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
                 }
-                if($from != 'UTF-8')
-                    $this->vals[$i] = mb_convert_encoding($this->vals[$i],'UTF-8',$from);
+                if ($from != 'UTF-8') {
+                    $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
+                }
 
                 // Make ornull fields use the nulls[]
                 if ((mb_strlen($this->ints[$i]) > 8) and (substr($this->ints[$i], -6) == 'ornull')) {
-                    $this->ints[$i] = substr($this->ints[$i],0, -6);
+                    $this->ints[$i] = substr($this->ints[$i], 0, -6);
                     $this->nulls[$i] = true;
                 }
                 if ($this->ints[$i] == 'ornull') {
@@ -456,7 +486,6 @@ class sqlbuddy {
                 if ($this->considered_mysql_raw_value($this->vals[$i])) {
                     $output .= $this->vals[$i];
                 } else {
-
                     switch ($this->ints[$i]) {
                         case 'str':
                         case 'string':
@@ -464,7 +493,7 @@ class sqlbuddy {
                         case 'autostring':
                             if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if( $this->nulls[$i] AND empty($this->vals[$i]) ){
+                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
@@ -472,39 +501,41 @@ class sqlbuddy {
                             break;
                         case 'int':
                         case 'tinyint':
-                            if($this->vals[$i] === 0){
+                            if ($this->vals[$i] === 0) {
                                 $output .= (int) $this->vals[$i];
-                            } else if($this->vals[$i] === '0'){
+                            } elseif ($this->vals[$i] === '0') {
                                 $output .= (int) $this->vals[$i];
-                            } else if($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
+                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if ($this->nulls[$i] and empty($this->vals[$i])) {
+                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $output .= (int) $this->vals[$i];
                             }
                             break;
                         case 'float':
-                            if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) )
+                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                                else
-                                $output .= "'" . (float) $this->make_number($this->vals[$i]) . "'";
+                            } else {
+                                    $output .= "'" . (float) $this->make_number($this->vals[$i]) . "'";
+                                }
                             break;
                         case 'dec':
                         case 'decimal':
-                            if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) )
+                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                                else
-                                $output .= $this->make_number($this->vals[$i]);
+                            } else {
+                                    $output .= $this->make_number($this->vals[$i]);
+                                }
                             break;
                         case 'date':
-                            if ( $this->considered_mysql_raw__date($this->vals[$i]) ) {
+                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
                                 $output .= $this->vals[$i];
-                            } else if ($this->considered_mysql_raw_value($this->vals[$i])) {
+                            } elseif ($this->considered_mysql_raw_value($this->vals[$i])) {
                                 $output .= $this->vals[$i];
-                            } else if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if( $this->nulls[$i] AND $this->considered_null_datetime( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $_v = $this->sloppydate($this->vals[$i], 'sql');
@@ -516,11 +547,11 @@ class sqlbuddy {
                             }
                             break;
                         case 'datetime':
-                            if ( $this->considered_mysql_raw__date($this->vals[$i]) ) {
+                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
                                 $output .= $this->vals[$i];
-                            } else if( $this->nulls[$i] AND $this->considered_null( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
                                 $output .= "NULL";
-                            } else if( $this->nulls[$i] AND $this->considered_null_datetime( $this->vals[$i] ) ){
+                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
                                 $output .= "NULL";
                             } else {
                                 $_v = $this->sloppydate($this->vals[$i], 'sql') . ' ' . $this->sloppydate($this->vals[$i], 'datetime2time');
@@ -535,15 +566,16 @@ class sqlbuddy {
                             $output .= $this->vals[$i];
                             break;
                         case 'boolean':
-                            if( $this->_bool($this->vals[$i]) )
+                            if ($this->_bool($this->vals[$i])) {
                                 $output .= 1;
-                                else
-                                $output .= 0;
+                            } else {
+                                    $output .= 0;
+                                }
                             break;
                         case 'email':
                             if (filter_var($this->vals[$i], FILTER_VALIDATE_EMAIL)) {
                                 $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
-                            } else if($this->nulls[$i]){
+                            } elseif ($this->nulls[$i]) {
                                 $output .= "NULL";
                             } else {
                                 $output .= "''";
@@ -558,49 +590,53 @@ class sqlbuddy {
                             break;
                     }
                 }
-
-
             }
         }
 
         return $output;
     }
 
-    public function build($what, $tablename, $where_match = null){
-
-        if( strtolower($what) == 'update' ){
-            if( $where_match === null )
+    /**
+     * Get the SQL query
+     *
+     * @param [type] $what
+     * @param [type] $tablename
+     * @param [type] $where_match
+     *
+     * @return void
+     */
+    public function build($what, $tablename, $where_match = null)
+    {
+        if (strtolower($what) == 'update') {
+            if ($where_match === null) {
                 throw new Exception('sqlbuddy missing where match for building update query');
+            }
 
-            $sql  = 'UPDATE `' . $tablename . '` SET ';
+            $sql = 'UPDATE `' . $tablename . '` SET ';
 
-            if($this->lb_mode)
+            if ($this->lb_mode) {
                 $sql .= "\n";
+            }
 
             $sql .= $this->output('set') . ' ';
 
-            if($this->lb_mode)
+            if ($this->lb_mode) {
                 $sql .= "\n";
+            }
 
             $sql .= 'WHERE ' . $where_match;
 
             return $sql;
-
-        } else if( strtolower($what) == 'insert' ){
-
+        } elseif (strtolower($what) == 'insert') {
             $sql = 'INSERT INTO `' . $tablename . '` (' . $this->output('keys') . ') VALUES (' . $this->output('values') . ')';
             return $sql;
-
         } else {
-
             throw new Exception('sqlbuddy build error, invalid type. Only UPDATE and INSERT allowed');
-
         }
-
     }
 
-    public function lb(){
-
+    public function lb()
+    {
         $this->lb_mode = true;
 
         return $this;
@@ -608,138 +644,160 @@ class sqlbuddy {
 
     /**
      * Force numerical float by fuzzy logic
-     * 
+     *
      * @param {string} $string The number
      * @return mixed Either an int or float.
      */
-    public function make_number($string){
-
+    public function make_number($string)
+    {
         $string = trim(preg_replace("/[A-Za-z]/", "", (string) $string));
 
         // Remove whitespace from the string
-        $string = str_replace("\xa0",' ',$string); // Just in case!
+        $string = str_replace("\xa0", ' ', $string); // Just in case!
         $string = trim(preg_replace("/\s/", "", $string));
 
-        if(preg_match("/,-$/",$string))  // Remove typical NOK setup: 500,-
-            $string = substr($string,0,-2);
-        if(preg_match("/.-$/",$string))  // Remove typical SEK setup: 500.-
-            $string = substr($string,0,-2);
+        if (preg_match("/,-$/", $string)) {  // Remove typical NOK setup: 500,-
+            $string = substr($string, 0, -2);
+        }
+        if (preg_match("/.-$/", $string)) {  // Remove typical SEK setup: 500.-
+            $string = substr($string, 0, -2);
+        }
 
-        $string = str_replace(',','.',$string);
+        $string = str_replace(',', '.', $string);
 
         $pos = strpos($string, '.');
-        if($pos === false)
+        if ($pos === false) {
             return (int) $string;
-            else
+        } else {
             return (float) $string;
+        }
     }
 
 
-    function sloppydate($k,$action='ddmmyyyy',$boolean=true){
+    public function sloppydate($k, $action = 'ddmmyyyy', $boolean = true)
+    {
         $del = '-';
         $k = trim($k);
 
-        if(strpos($k, 'T')!==false)
-            $k = str_replace('T',' ',$k);
+        if (str_contains($k, 'T')) {
+            $k = str_replace('T', ' ', $k);
+        }
 
-        if($action=='fix'){
+        if ($action == 'fix') {
             // If we have 0000-00-00 00:00:00 we need to remove the time
-            if(preg_match('/:/',$k)){ // I expect there to be a space between date and time
-                $t = explode(' ',$k);
-                if(count($t)!=2)
-                return '0000-00-00';
+            if (preg_match('/:/', $k)) { // I expect there to be a space between date and time
+                $t = explode(' ', $k);
+                if (count($t) != 2) {
+                    return '0000-00-00';
+                }
                 $k = $t[0];
             }
 
-            $k = str_replace('.','/',$k);
-            $k = str_replace(',','/',$k);
-            $k = str_replace(' ','/',$k);
-            $k = str_replace('-','/',$k);
+            $k = str_replace('.', '/', $k);
+            $k = str_replace(',', '/', $k);
+            $k = str_replace(' ', '/', $k);
+            $k = str_replace('-', '/', $k);
 
             // If no slash probably a number,
             // so we failsafe atleast 0000-00-00
-            if(!preg_match('/\//',$k))
+            if (!preg_match('/\//', $k)) {
                 return '0000-00-00';
+            }
 
-            $t = explode('/',$k);
-            if(count($t) != 3)
+            $t = explode('/', $k);
+            if (count($t) != 3) {
                 return '0000-00-00';
-            if(strlen($t[0])!=4){
-                if(strlen($t[2])==2) $t[2] = '20' . $t[2]; else
-                if(strlen($t[2])==1) $t[2] = '200' . $t[2];
+            }
+            if (strlen($t[0]) != 4) {
+                if (strlen($t[2]) == 2) {
+                    $t[2] = '20' . $t[2];
+                } elseif (strlen($t[2]) == 1) {
+                    $t[2] = '200' . $t[2];
+                }
                 return str_pad($t[0], 2, '0', STR_PAD_LEFT) . '/' . str_pad($t[1], 2, '0', STR_PAD_LEFT) . '/' . $t[2];
             } else {
                 return $t[0] . '/' . str_pad($t[1], 2, '0', STR_PAD_LEFT) . '/' . str_pad($t[2], 2, '0', STR_PAD_LEFT);
             }
-        } else if($action=='reverse') {
-            $t = $this->sloppydate($k,'splitt');
+        } elseif ($action == 'reverse') {
+            $t = $this->sloppydate($k, 'splitt');
             return $t[2] . '/' . $t[1] . '/' . $t[0];
-        } else if($action=='ddmmyyyy') {
-            $t = $this->sloppydate($k,'splitt');
-            if(strlen($t[2])==4)
+        } elseif ($action == 'ddmmyyyy') {
+            $t = $this->sloppydate($k, 'splitt');
+            if (strlen($t[2]) == 4) {
                 return $t[0] . $del . $t[1] . $del . $t[2];
-                else
+            } else {
                 return $t[2] . $del . $t[1] . $del . $t[0];
-        } else if($action=='yyyymmdd') {
-            $t = $this->sloppydate($k,'splitt');
-            if(strlen($t[2])==4)
+            }
+        } elseif ($action == 'yyyymmdd') {
+            $t = $this->sloppydate($k, 'splitt');
+            if (strlen($t[2]) == 4) {
                 return $t[2] . $del . $t[1] . $del . $t[0];
-                else
+            } else {
                 return $t[0] . $del . $t[1] . $del . $t[2];
-        } else if($action=='sql') {
-            $k = $this->sloppydate($k,'fix');
-            return $this->sloppydate($k,'yyyymmdd');
-        } else if($action == 'splitt') {
-            if( preg_match('/-/',$k) ) $splitter = "-";
-            if( preg_match("/\./",$k) ) $splitter = '.';
-            if( preg_match('/\//',$k) ) $splitter = '/';
-                $t = explode($splitter,$k);
+            }
+        } elseif ($action == 'sql') {
+            $k = $this->sloppydate($k, 'fix');
+            return $this->sloppydate($k, 'yyyymmdd');
+        } elseif ($action == 'splitt') {
+            if (preg_match('/-/', $k)) {
+                $splitter = "-";
+            }
+            if (preg_match("/\./", $k)) {
+                $splitter = '.';
+            }
+            if (preg_match('/\//', $k)) {
+                $splitter = '/';
+            }
+            $t = explode($splitter, $k);
             return $t;
-        } else if($action=='int'){
-            $t = $this->sloppydate($k,'splitt');
+        } elseif ($action == 'int') {
+            $t = $this->sloppydate($k, 'splitt');
             return (int) ($t[0] + $t[1] + $t[2]);
-        } else if($action=='test'){
+        } elseif ($action == 'test') {
             $output = "First date = $k<br>\r\n";
-            $output .= "-&gt; fix : " . $this->sloppydate($k,'fix') . "<br>\r\n";
-            $output .= "-&gt; reverse : " . $this->sloppydate($k,'reverse') . "<br>\r\n";
-            $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k,'ddmmyyyy') . "<br>\r\n";
-            $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k,'yyyymmdd') . "<br>\r\n";
-            $output .= "-&gt; sql : " . $this->sloppydate($k,'sql') . "<br>\r\n";
+            $output .= "-&gt; fix : " . $this->sloppydate($k, 'fix') . "<br>\r\n";
+            $output .= "-&gt; reverse : " . $this->sloppydate($k, 'reverse') . "<br>\r\n";
+            $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k, 'ddmmyyyy') . "<br>\r\n";
+            $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k, 'yyyymmdd') . "<br>\r\n";
+            $output .= "-&gt; sql : " . $this->sloppydate($k, 'sql') . "<br>\r\n";
             $k = '31.9.2005';
             $output .= "Second date = $k<br>\r\n";
-            $output .= "-&gt; fix : " . $this->sloppydate($k,'fix') . "<br>\r\n";
-            $output .= "-&gt; reverse : " . $this->sloppydate($k,'reverse') . "<br>\r\n";
-            $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k,'ddmmyyyy') . "<br>\r\n";
-            $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k,'yyyymmdd') . "<br>\r\n";
-            $output .= "-&gt; sql : " . $this->sloppydate($k,'sql') . "<br>\r\n";
+            $output .= "-&gt; fix : " . $this->sloppydate($k, 'fix') . "<br>\r\n";
+            $output .= "-&gt; reverse : " . $this->sloppydate($k, 'reverse') . "<br>\r\n";
+            $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k, 'ddmmyyyy') . "<br>\r\n";
+            $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k, 'yyyymmdd') . "<br>\r\n";
+            $output .= "-&gt; sql : " . $this->sloppydate($k, 'sql') . "<br>\r\n";
             $k = '2005.5.31';
             $output .= "Third date = $k<br>\r\n";
-            $output .= "-&gt; fix : " . $this->sloppydate($k,'fix') . "<br>\r\n";
-            $output .= "-&gt; reverse : " . $this->sloppydate($k,'reverse') . "<br>\r\n";
-            $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k,'ddmmyyyy') . "<br>\r\n";
-            $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k,'yyyymmdd') . "<br>\r\n";
-            $output .= "-&gt; sql : " . $this->sloppydate($k,'sql') . "<br>\r\n";
+            $output .= "-&gt; fix : " . $this->sloppydate($k, 'fix') . "<br>\r\n";
+            $output .= "-&gt; reverse : " . $this->sloppydate($k, 'reverse') . "<br>\r\n";
+            $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k, 'ddmmyyyy') . "<br>\r\n";
+            $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k, 'yyyymmdd') . "<br>\r\n";
+            $output .= "-&gt; sql : " . $this->sloppydate($k, 'sql') . "<br>\r\n";
             return $output;
-        } else if($action=='datetime2date'){
-            $t = explode(' ',$k);
+        } elseif ($action == 'datetime2date') {
+            $t = explode(' ', $k);
             return $t[0];
-        } else if($action=='datetime2time'){
-            $t = explode(' ',$k);
-            if(isset($t[1])){
-                $t[1] = str_replace('.',':',$t[1]);
-                $t[1] = str_replace(',',':',$t[1]);
-                $t2 = explode(':',$t[1]);
+        } elseif ($action == 'datetime2time') {
+            $t = explode(' ', $k);
+            if (isset($t[1])) {
+                $t[1] = str_replace('.', ':', $t[1]);
+                $t[1] = str_replace(',', ':', $t[1]);
+                $t2 = explode(':', $t[1]);
                 return (int) $t2[0] . ':' . (int) $t2[1] . ':' . (int) $t2[2];
             } else {
                 return '00:00:00';
             }
-        } else if($action=='valid'){
-            if($boolean AND !strlen($k)) return true;
-            $test = explode($del,$this->sloppydate($k,'sql'));
-            if( (count($test)>=3) AND (strlen($test[0])==4) AND (strlen($test[1]) AND (strlen($test[1])<=3)) AND (strlen($test[2]) AND (strlen($test[2])<=3)))
+        } elseif ($action == 'valid') {
+            if ($boolean and !strlen($k)) {
                 return true;
-                else
+            }
+            $test = explode($del, $this->sloppydate($k, 'sql'));
+            if ((count($test) >= 3) and (strlen($test[0]) == 4) and (strlen($test[1]) and (strlen($test[1]) <= 3)) and (strlen($test[2]) and (strlen($test[2]) <= 3))) {
+                return true;
+            } else {
                 return false;
+            }
         }
     }
 
@@ -748,70 +806,68 @@ class sqlbuddy {
      * After having so much problems with (bool) and what my own head thought (bool) worked, this
      * personal class is the only way to go. _bool() will return the logical true/false based on
      * what you evaluate. You can evaluate whatever.
-     * 
+     *
      * update 27 april 2006
-     * 
+     *
      * @param {mixed} $var Expression to check
      * @return boolean True or false boolean
      */
-    function _bool($var, $var_ref=null){
-
-        if( $var_ref == '_SESSION' ){
-            if( !isset($_SESSION[$var]) )
+    public function _bool($var, $var_ref = null)
+    {
+        if ($var_ref == '_SESSION') {
+            if (!isset($_SESSION[$var])) {
                 return false;
+            }
 
             $var = $_SESSION[$var];
-        } 
+        }
 
-        if(is_bool($var)){
-
+        if (is_bool($var)) {
             return $var;
-
-        } else if($var === NULL || $var === 'NULL' || $var === 'null'){
-
+        } elseif ($var === null || $var === 'NULL' || $var === 'null') {
             return false;
-
-        } else if(is_string($var)){
-
+        } elseif (is_string($var)) {
             $var = trim($var);
 
-            if($var=='false'){ return false;
-            } else if($var=='true'){ return true;
-            } else if($var=='no'){ return false;
-            } else if($var=='yes'){ return true;
-            } else if($var=='off'){ return false;
-            } else if($var=='on'){ return true;
-            } else if($var==''){ return false;
-            } else if(ctype_digit($var)){
-                if((int) $var)
+            if ($var == 'false') {
+                return false;
+            } elseif ($var == 'true') {
+                return true;
+            } elseif ($var == 'no') {
+                return false;
+            } elseif ($var == 'yes') {
+                return true;
+            } elseif ($var == 'off') {
+                return false;
+            } elseif ($var == 'on') {
+                return true;
+            } elseif ($var == '') {
+                return false;
+            } elseif (ctype_digit($var)) {
+                if ((int) $var) {
                     return true;
-                    else
+                } else {
                     return false;
-            } else { return true; }
-
-        } else if(ctype_digit((string) $var)){
-
-            if((int) $var)
+                }
+            } else {
                 return true;
-                else
-                return false;
-
-        } else if(is_array($var)){
-
-            if(count($var))
+            }
+        } elseif (ctype_digit((string) $var)) {
+            if ((int) $var) {
                 return true;
-                else
+            } else {
                 return false;
-
-        } else if(is_object($var)){
-
+            }
+        } elseif (is_array($var)) {
+            if (count($var)) {
+                return true;
+            } else {
+                return false;
+            }
+        } elseif (is_object($var)) {
             return true;// No reason to (bool) an object, we assume OK for crazy logic
-
         } else {
-
             return true;// Whatever came though must be something,  OK for crazy logic
-
         }
     }
-
 }

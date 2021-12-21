@@ -1,4 +1,5 @@
 <?php
+
 class testsqlbuddy extends sqlbuddy
 {
     public function getversion()
