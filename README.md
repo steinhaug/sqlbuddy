@@ -4,6 +4,10 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
+v1.2.0 - Updated 21 des 2021
+
+\* Oppdatert og klart for PHP 8.0  
+
 v1.1.1 - Updated 20 aug 2021
 
 \* rewrote parsing logic, now all parsing will assume: col, val, type, has_null  
