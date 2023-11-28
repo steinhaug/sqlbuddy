@@ -4,6 +4,11 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
+v1.3.0 - Updated 28 nov 2023
+
+\* Oppdatert og klart for PHP 8.1  
+\+ Added time  
+
 v1.2.0 - Updated 21 des 2021
 
 \* Oppdatert og klart for PHP 8.0  
