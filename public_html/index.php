@@ -1,11 +1,5 @@
 <?php
-
-#$string = 'datetimeornull';
-#echo substr($string,-6);
-#echo '<br>';
-#echo substr($string,0, -6);
-#exit;
-
+header("Content-Type: text/html; charset=UTF-8");
 
 define('BR', '<br>');
 require '../vendor/autoload.php';
@@ -27,9 +21,22 @@ if ($mysqli->character_set_name() != 'utf8') {
     }
 }
 
-$modes = ['str', 'string', 'text', 'email', 'float', 'ornull', 'strornull', 'int', 'tinyint', 'intornull', 'dec', 'decimal', 'date', 'dateornull', 'datetime', 'datetimeornull', 'raw', 'boolean', 'column', 'col'];
+$modes = [
+    'ornull', 'strornull', 'intornull', 'dateornull', 'datetimeornull',
+    'str', 'string', 'text', 'autostring', 
+    'int', 'tinyint', 
+    'float', 
+    'dec', 'decimal', 
+    'date', 
+    'time',
+    'datetime',
+    'raw',
+    'boolean', 
+    'email', 
+    'col', 'column',
+];
 
-echo '<h1>sqlbuddy test suit v1.0.0</h1>';
+echo '<h1>sqlbuddy test suit v1.3.0</h1>';
 
 $sql = new sqlbuddy();
 
@@ -53,7 +60,7 @@ div.blocks::after {
 
 
 
-
+/*
 $data = ['updated' => 'NULL'];
 echo $sql->flush();
 $sql->que('d1', $data['updated']);
@@ -62,7 +69,7 @@ $sql->que('d3', $data['updated'], 'dateornull');
 
 
 echo $sql->build('UPDATE', 'demo', 'id=1') . BR;
-
+*/
 
 
 
@@ -81,60 +88,89 @@ echo '<b>MODES WITH VALUE NULL:</b>' . "\n";
 foreach ($modes as $mode) {
     $sql->que($mode, 'NULL', $mode);
 }
-echo htmlentities($sql->lb()->build('UPDATE', 'demo', 'id=1') . "\n\n");
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
 echo $sql->flush();
+
 echo "</pre><pre>";
 
 echo '<b>MODES WITH VALUE 1 and nullable:</b>' . "\n";
 foreach ($modes as $mode) {
     $sql->que($mode, '1', $mode, true);
 }
-echo htmlentities($sql->lb()->build('UPDATE', 'demo', 'id=1') . "\n\n");
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
 echo $sql->flush();
+
 echo "</pre><pre>";
 
 echo '<b>MODES WITH VALUE a and nullable:</b>' . "\n";
 foreach ($modes as $mode) {
     $sql->que($mode, 'a', $mode, true);
 }
-echo htmlentities($sql->lb()->build('UPDATE', 'demo', 'id=1') . "\n\n");
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
 echo $sql->flush();
+
 echo "</pre><pre>";
 
 echo '<b>MODES WITH VALUE a:</b>' . "\n";
 foreach ($modes as $mode) {
     $sql->que($mode, 'a', $mode);
 }
-echo htmlentities($sql->lb()->build('UPDATE', 'demo', 'id=1') . "\n\n");
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
 
 echo "</pre></div>";
+
+
 
 echo '<br>';
 
 
-
-$data = [
-    'first' => '', 'last' => '', 'age' => '', 'updated' => 'NOW()'
-];
+echo '<div class="blocks"><pre>';
 echo $sql->flush();
-$sql->que('string', $data['updated']);
-$sql->que('string', $data['updated'], true);
-$sql->que('date', $data['updated'], 'datetime');
-$sql->que('date', $data['updated'], 'dateornull');
-$sql->que('date', $data['updated'], 'datetimeornull');
-echo $sql->build('UPDATE', 'demo', 'id=1') . BR;
-$data = [
-    'first' => 'NULL', 'last' => 'NULL', 'age' => 'NULL', 'updated' => 'NULL'
-];
+$sql->que('_', 'now()');
+$sql->que('true', 'now()', true);
+$sql->que('raw', 'now()', 'raw');
+$sql->que('dateornull', 'now()', 'dateornull');
+$sql->que('datetimeornull', 'now()', 'datetimeornull');
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
+
+echo "</pre><pre>";
+
 echo $sql->flush();
-$sql->que('string', $data['updated']);
-$sql->que('string', $data['updated'], true);
-$sql->que('date', $data['updated'], 'datetime');
-$sql->que('date', $data['updated'], 'dateornull');
-$sql->que('date', $data['updated'], 'datetimeornull');
+echo '<b>MODES WITH VALUE NOW():</b>' . "\n";
+foreach ($modes as $mode) {
+    $sql->que($mode, 'NOW()', $mode);
+}
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
+
+echo "</pre><pre>";
+
+echo $sql->flush();
+echo '<b>MODES WITH VALUE NOW() and nullable:</b>' . "\n";
+foreach ($modes as $mode) {
+    $sql->que($mode, 'NOW()', $mode, true);
+}
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
+
+echo "</pre><pre>";
+
+echo $sql->flush();
+echo '<b>MODES WITH VALUE Kim\'s "!":</b>' . "\n";
+foreach ($modes as $mode) {
+    $sql->que($mode, 'Kim\'s "!"', $mode);
+}
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
+
+echo "</pre><pre>";
+
+echo $sql->flush();
+echo '<b>MODES WITH VALUE Kim\'s "!" and nullable:</b>' . "\n";
+foreach ($modes as $mode) {
+    $sql->que($mode, 'Kim\'s "!"', $mode, true);
+}
+echo $sql->lb('set')->build('UPDATE', 'demo', 'id=1') . "\n\n";
 
 
-echo $sql->build('UPDATE', 'demo', 'id=1') . BR;
+echo "</pre></div>";
 
 /*
 echo $sql->build('INSERT','demo') . BR;
