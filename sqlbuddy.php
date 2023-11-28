@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.2.0'; // PHP80
+    public const version = '1.3.0'; // PHP80
 
     private $keys = [];
     private $vals = [];
@@ -17,6 +17,8 @@ class sqlbuddy
 
     private $safehtml = false;
     private $lb_mode = false;
+    private $lb_mode_cmd = '';
+    private $lb_mode_conf = [];
 
     public function __construct()
     {
@@ -409,6 +411,13 @@ class sqlbuddy
                                 $output .= "'" . $this->sloppydate($this->vals[$i], 'sql') . "'";
                             }
                             break;
+                        case 'time':
+                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
+                                $output .= "NULL";
+                            } else {
+                                $output .= "'" . $this->make_time($this->vals[$i]) . "'";
+                            }
+                            break;
                         case 'datetime':
                             if ($this->considered_mysql_raw__date($this->vals[$i])) {
                                 $output .= $this->vals[$i];
@@ -416,6 +425,11 @@ class sqlbuddy
                                 $output .= "NULL";
                             } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
                                 $output .= "NULL";
+                            } elseif (!$this->isValidDateTime($this->vals[$i])) {
+                                if($this->nulls[$i])
+                                    $output .= "NULL";
+                                    else
+                                    $output .= "'0000-00-00 00:00:00'";
                             } else {
                                 $output .= "'" . $this->sloppydate($this->vals[$i], 'sql') . ' ' . $this->sloppydate($this->vals[$i], 'datetime2time') . "'";
                             }
@@ -546,6 +560,13 @@ class sqlbuddy
                                 }
                             }
                             break;
+                        case 'time':
+                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
+                                $output .= "NULL";
+                            } else {
+                                $output .= "'" . $this->make_time($this->vals[$i]) . "'";
+                            }
+                            break;
                         case 'datetime':
                             if ($this->considered_mysql_raw__date($this->vals[$i])) {
                                 $output .= $this->vals[$i];
@@ -553,6 +574,11 @@ class sqlbuddy
                                 $output .= "NULL";
                             } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
                                 $output .= "NULL";
+                            } elseif (!$this->isValidDateTime($this->vals[$i])) {
+                                if($this->nulls[$i])
+                                    $output .= "NULL";
+                                    else
+                                    $output .= "'0000-00-00 00:00:00'";
                             } else {
                                 $_v = $this->sloppydate($this->vals[$i], 'sql') . ' ' . $this->sloppydate($this->vals[$i], 'datetime2time');
                                 if ($this->nulls[$i] and $this->considered_null_datetime($_v)) {
@@ -607,7 +633,45 @@ class sqlbuddy
      */
     public function build($what, $tablename, $where_match = null)
     {
-        if (strtolower($what) == 'update') {
+
+
+        if (strtolower($what) == 'update' and $this->lb_mode_cmd == 'set') {
+
+            $sql = $this->output('set');
+            $lines = explode("\n", $sql);
+            $out = [];
+            $lenL = 0;
+            $lenR = 0;
+            foreach($lines as $line){
+                $pos = strpos($line, '=');
+                $left = substr($line, 0, $pos);
+                $right = substr($line, $pos + 1);
+                $l = strlen($left);
+                $r = strlen($right);
+                $out[] = [$left, $right];
+                if($l > $lenL) $lenL = $l;
+                if($r > $lenR) $lenR = $r;
+            }
+
+            $sql = '';
+            foreach($out as $o){
+
+                $_b = '';
+                $_e = '';
+
+                if( str_starts_with($o[1], "'") and str_ends_with($o[1], "', ") ){
+                    $_b = '<span style="color:green">';
+                    $_e = '</span>';
+
+                }
+
+
+                $sql .= htmlentities(str_pad($o[0], $lenL), ENT_QUOTES, 'UTF-8') . ' = ' . $_b . htmlentities(str_pad($o[1], $lenR), ENT_QUOTES, 'UTF-8') . $_e . "\n";
+            }
+
+            return $sql;
+
+        } else if (strtolower($what) == 'update') {
             if ($where_match === null) {
                 throw new Exception('sqlbuddy missing where match for building update query');
             }
@@ -635,9 +699,11 @@ class sqlbuddy
         }
     }
 
-    public function lb()
+    public function lb($cmd='', $conf=[])
     {
         $this->lb_mode = true;
+        $this->lb_mode_cmd = $cmd;
+        $this->lb_mode_conf = $conf;
 
         return $this;
     }
@@ -670,6 +736,31 @@ class sqlbuddy
             return (int) $string;
         } else {
             return (float) $string;
+        }
+    }
+
+
+    public function make_time($str)
+    {
+        $parts = explode(':', $str);
+        if(count($parts) == 2){
+            return sprintf('%02s', $parts[0]) . ':' . sprintf('%02s', $parts[1]) . ':00';
+        } else if(count($parts) == 3){
+            return sprintf('%02s', $parts[0]) . ':' . sprintf('%02s', $parts[1]) . ':' . sprintf('%02s', $parts[2]);
+        } else {
+            return '00:00:00';
+        }
+    }
+
+    public function isValidDateTime($dateTimeString) {
+        // Create a DateTime object from the provided string
+        $dateTime = DateTime::createFromFormat('Y-m-d H:i:s', $dateTimeString);
+
+        // Check if the DateTime object was created successfully and if the input string matches the expected format
+        if ($dateTime && $dateTime->format('Y-m-d H:i:s') === $dateTimeString) {
+            return true;
+        } else {
+            return false;
         }
     }
 
