@@ -4,6 +4,9 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
+v1.3.1 - Updated 6 des 2023
+\+ Added unshift()  
+
 v1.3.0 - Updated 28 nov 2023
 
 \* Oppdatert og klart for PHP 8.1  

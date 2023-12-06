@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.3.0'; // PHP80
+    public const version = '1.3.1'; // PHP80
 
     private $keys = [];
     private $vals = [];
@@ -146,6 +146,35 @@ class sqlbuddy
         array_push($this->ints, $i);
         array_push($this->nulls, $this->is_nullable($n));
     }
+
+
+    /**
+     * Reverse way of adding data to be updated
+     *
+     * @param [type] $k
+     * @param [type] $v
+     * @param string $i
+     * @param string $n
+     *
+     * @return void
+     */
+    function unshift($k,$v,$i='string',$n='NO'){
+    
+        if( mb_strpos((string) $i,':')!==false ){
+            $tmp = explode(':',(string) $i);
+            $i = $tmp[0];
+            $len = (int) $tmp[1];
+            if( $len AND mb_strlen((string) $v) AND (mb_strlen((string) $v) > $len) ){
+                $v = mb_substr((string) $v,0,$len);
+            }
+        }
+
+        array_unshift($this->keys, $k);
+        array_unshift($this->vals, $v);
+        array_unshift($this->ints, $i);
+        array_unshift($this->nulls, $this->is_nullable($n));
+    }
+
 
     /**
      * Alias of ->que()
