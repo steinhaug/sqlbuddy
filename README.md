@@ -4,6 +4,9 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
+v1.3.2 - Updated 30 april 2024
+\- Property safehtml set to public.  
+
 v1.3.1 - Updated 6 des 2023
 \+ Added unshift()  
 

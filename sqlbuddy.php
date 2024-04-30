@@ -8,14 +8,14 @@
  */
 class sqlbuddy
 {
-    public const version = '1.3.1'; // PHP80
+    public const version = '1.3.2'; // PHP80
 
     private $keys = [];
     private $vals = [];
     private $ints = [];
     private $nulls = [];
 
-    private $safehtml = false;
+    public $safehtml = false;
     private $lb_mode = false;
     private $lb_mode_cmd = '';
     private $lb_mode_conf = [];
