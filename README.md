@@ -4,10 +4,11 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
-v1.3.2 - Updated 30 april 2024
-\- Property safehtml set to public.  
+v1.3.3 - Updated 16 august 2024
+\- Bugfix, pseudo logic fix for null values when using string:X
 
-v1.3.1 - Updated 6 des 2023
+v1.3.2 - Updated 30 april 2024
+\- Property safehtml set to public.  v1.3.1 - Updated 6 des 2023
 \+ Added unshift()  
 
 v1.3.0 - Updated 28 nov 2023

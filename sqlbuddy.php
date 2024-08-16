@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.3.2'; // PHP80
+    public const version = '1.3.3'; // PHP80
 
     private $keys = [];
     private $vals = [];
@@ -131,7 +131,9 @@ class sqlbuddy
             $tmp = explode(':', $i);
             $i = $tmp[0];
             $len = (int) $tmp[1];
-            if ($len and mb_strlen($v) and (mb_strlen($v) > $len)) {
+            if ($len and is_null($v)) {
+                $v = '';
+            } else if ($len and mb_strlen($v) and (mb_strlen($v) > $len)) {
                 $v = mb_substr($v, 0, $len);
             }
         }
@@ -158,14 +160,14 @@ class sqlbuddy
      *
      * @return void
      */
-    function unshift($k,$v,$i='string',$n='NO'){
+    function unshift($k, $v, $i='string', $n='NO'){
     
-        if( mb_strpos((string) $i,':')!==false ){
-            $tmp = explode(':',(string) $i);
+        if (mb_strpos((string) $i,':')!==false) {
+            $tmp = explode(':', (string) $i);
             $i = $tmp[0];
             $len = (int) $tmp[1];
-            if( $len AND mb_strlen((string) $v) AND (mb_strlen((string) $v) > $len) ){
-                $v = mb_substr((string) $v,0,$len);
+            if ($len AND mb_strlen((string) $v) AND (mb_strlen((string) $v) > $len)) {
+                $v = mb_substr((string) $v, 0, $len);
             }
         }
 
