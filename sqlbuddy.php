@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.3.3'; // PHP80
+    public const version = '1.3.4'; // PHP80
 
     private $keys = [];
     private $vals = [];
@@ -513,7 +513,7 @@ class sqlbuddy
                 if ($from === false) {
                     $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
                 }
-                if ($from != 'UTF-8') {
+                if (!is_null($this->vals[$i]) AND ($from != 'UTF-8')) {
                     $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
                 }
 

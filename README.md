@@ -4,8 +4,11 @@ Helper class for making sure SQL inserts and updates are not crashing anything.
 
 ## VERSION
 
+v1.3.4 - Updated 22 august 2024
+\- Deprecation notice, make sure NULL is not passed to the mb_detect_encoding()
+
 v1.3.3 - Updated 16 august 2024
-\- Bugfix, pseudo logic fix for null values when using string:X
+\- Bugfix, pseudo logic fix for null values when using string:(int)n
 
 v1.3.2 - Updated 30 april 2024
 \- Property safehtml set to public.  v1.3.1 - Updated 6 des 2023
