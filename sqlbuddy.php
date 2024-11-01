@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.3.4'; // PHP80
+    public const version = '1.3.6'; // PHP82
 
     private $keys = [];
     private $vals = [];
@@ -56,6 +56,10 @@ class sqlbuddy
     public function considered_null($val)
     {
         if ($val === false) {
+            return true;
+        }
+
+        if ($val === null) {
             return true;
         }
 
@@ -368,12 +372,14 @@ class sqlbuddy
                 }
 
                 // If the detection fails, we re-detect with a different set of encodings to check for
-                $from = mb_detect_encoding($this->vals[$i]);
-                if ($from === false) {
-                    $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
-                }
-                if ($from != 'UTF-8') {
-                    $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
+                if ($this->vals[$i] !== null) {
+                    $from = mb_detect_encoding($this->vals[$i]);
+                    if ($from === false) {
+                        $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
+                    }
+                    if ($from != 'UTF-8') {
+                        $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
+                    }
                 }
 
                 // Make ornull fields use the nulls[]
