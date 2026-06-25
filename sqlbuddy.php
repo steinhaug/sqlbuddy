@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.3.6'; // PHP82
+    public const version = '1.4.0'; // PHP82 - normalize() engine
 
     private $keys = [];
     private $vals = [];
@@ -345,6 +345,163 @@ class sqlbuddy
         }
     }
 
+    /**
+     * Reduce one queued column to a render-neutral descriptor.
+     *
+     * All per-mode logic lives here exactly once. Both the string emitter
+     * (output) and the future prepared_build() consume this, so the two
+     * stay in sync by construction instead of by copy-paste.
+     *
+     * Returns one of:
+     *   ['inline', string $sql]
+     *       Raw SQL fragment written verbatim. Used for NULL, NOW(),
+     *       column references and 'raw' mode - things that can never be
+     *       a bound '?' parameter.
+     *
+     *   ['value', string $bindType, string $style, mixed $value]
+     *       $bindType : 'i' | 's' | 'd'   (mysqli bind type, for prepared statements)
+     *       $style    : 'quote' | 'bare'  (string-mode rendering)
+     *       $value    : the final, transformed, UNescaped value.
+     *                   String mode escapes at render time; PS mode binds raw.
+     *
+     * @param int $i Index into the queued arrays.
+     * @return array
+     */
+    private function normalize($i)
+    {
+        $val  = $this->vals[$i];
+        $mode = $this->ints[$i];
+        $null = $this->nulls[$i];
+
+        // 'ornull' suffix => force nullable, strip down to the base mode.
+        if (mb_strlen((string) $mode) > 8 and substr($mode, -6) === 'ornull') {
+            $mode = substr($mode, 0, -6);
+            $null = true;
+        }
+        if ($mode === 'ornull') {
+            $mode = 'str';
+            $null = true;
+        }
+
+        // Normalize encoding to UTF-8 (guarded against null - this is the
+        // bug the old output('set') path had: mb_detect_encoding(null)).
+        if ($val !== null) {
+            $from = mb_detect_encoding($val);
+            if ($from === false) {
+                $from = mb_detect_encoding($val, 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
+            }
+            if ($from !== 'UTF-8') {
+                $val = mb_convert_encoding($val, 'UTF-8', $from);
+            }
+        }
+
+        // Literal 'NULL' wins over every mode.
+        if ($this->considered_mysql_raw_value($val)) {
+            return ['inline', $val];
+        }
+
+        switch ($mode) {
+            case 'str':
+            case 'string':
+            case 'text':
+            case 'autostring':
+                if ($null and ($this->considered_null($val) or empty($val))) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 's', 'quote', $val];
+
+            case 'int':
+            case 'tinyint':
+                if ($val === 0 or $val === '0') {
+                    return ['value', 'i', 'bare', 0];
+                }
+                if ($null and ($this->considered_null($val) or empty($val))) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 'i', 'bare', (int) $val];
+
+            case 'float':
+                if ($null and $this->considered_null($val)) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 'd', 'quote', (float) $this->make_number($val)];
+
+            case 'dec':
+            case 'decimal':
+                if ($null and $this->considered_null($val)) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 'd', 'bare', $this->make_number($val)];
+
+            case 'date':
+                if ($this->considered_mysql_raw__date($val)) {
+                    return ['inline', $val];
+                }
+                if ($null and ($this->considered_null($val) or $this->considered_null_datetime($val))) {
+                    return ['inline', 'NULL'];
+                }
+                $d = $this->sloppydate($val, 'sql');
+                if ($null and $this->considered_null_datetime($d)) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 's', 'quote', $d];
+
+            case 'time':
+                if ($null and $this->considered_null($val)) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 's', 'quote', $this->make_time($val)];
+
+            case 'datetime':
+                if ($this->considered_mysql_raw__date($val)) {
+                    return ['inline', $val];
+                }
+                if ($null and ($this->considered_null($val) or $this->considered_null_datetime($val))) {
+                    return ['inline', 'NULL'];
+                }
+                if (!$this->isValidDateTime($val)) {
+                    return $null ? ['inline', 'NULL'] : ['inline', "'0000-00-00 00:00:00'"];
+                }
+                $dt = $this->sloppydate($val, 'sql') . ' ' . $this->sloppydate($val, 'datetime2time');
+                if ($null and $this->considered_null_datetime($dt)) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 's', 'quote', $dt];
+
+            case 'raw':
+                return ['inline', $val];
+
+            case 'boolean':
+                return ['value', 'i', 'bare', $this->_bool($val) ? 1 : 0];
+
+            case 'email':
+                if (filter_var($val, FILTER_VALIDATE_EMAIL)) {
+                    return ['value', 's', 'quote', $val];
+                }
+                if ($null) {
+                    return ['inline', 'NULL'];
+                }
+                return ['value', 's', 'quote', '']; // renders ''
+
+            case 'col':
+            case 'column':
+                return ['inline', '`' . $val . '`'];
+
+            default:
+                throw new Exception('sqlbuddy unknown handler: "' . $mode . '"');
+        }
+    }
+
+    /**
+     * Emit a SQL fragment string.
+     *
+     * 'keys'   => `col1`, `col2`            (column list for INSERT)
+     * 'values' => 'a', 1, NULL             (value list for INSERT)
+     * 'set'    => `col1`='a', `col2`=NULL  (assignment list for UPDATE)
+     *
+     * @param string $m
+     * @return string
+     */
     public function output($m)
     {
         global $mysqli;
@@ -354,304 +511,48 @@ class sqlbuddy
         }
 
         $output = '';
-        if ($m == 'keys') {
-            for ($i = 0;$i < count($this->keys);$i++) {
+
+        if ($m === 'keys') {
+            for ($i = 0; $i < count($this->keys); $i++) {
                 if ($i) {
                     $output .= ', ';
                 }
                 $output .= '`' . $this->keys[$i] . '`';
             }
-        } elseif ($m == 'values') {
-            for ($i = 0;$i < count($this->vals);$i++) {
-                if ($i) {
-                    $output .= ', ';
-                }
-                if ($this->safehtml) { // XSS_FIX
-                    // Data to process, $this->vals[$i]
-                    // We should add some safehtml logic here
-                }
+            return $output;
+        }
 
-                // If the detection fails, we re-detect with a different set of encodings to check for
-                if ($this->vals[$i] !== null) {
-                    $from = mb_detect_encoding($this->vals[$i]);
-                    if ($from === false) {
-                        $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
-                    }
-                    if ($from != 'UTF-8') {
-                        $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
-                    }
-                }
+        // 'values' and 'set' render values identically; 'set' adds the
+        // `col`= prefix and honours lb_mode line breaks.
+        $isSet = ($m === 'set');
 
-                // Make ornull fields use the nulls[]
-                if ((mb_strlen($this->ints[$i]) > 8) and (substr($this->ints[$i], -6) == 'ornull')) {
-                    $this->ints[$i] = substr($this->ints[$i], 0, -6);
-                    $this->nulls[$i] = true;
-                }
-                if ($this->ints[$i] == 'ornull') {
-                    $this->ints[$i] = 'str';
-                    $this->nulls[$i] = true;
-                }
-
-                if ($this->considered_mysql_raw_value($this->vals[$i])) {
-                    $output .= $this->vals[$i];
-                } else {
-                    switch ($this->ints[$i]) {
-                        case 'str':
-                        case 'string':
-                        case 'text':
-                        case 'autostring':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
-                            }
-                            break;
-                        case 'int':
-                        case 'tinyint':
-                            if ($this->vals[$i] === 0) {
-                                $output .= (int) $this->vals[$i];
-                            } elseif ($this->vals[$i] === '0') {
-                                $output .= (int) $this->vals[$i];
-                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= (int) $this->vals[$i];
-                            }
-                            break;
-                        case 'float':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                    $output .= "'" . (float) $this->make_number($this->vals[$i]) . "'";
-                                }
-                            break;
-                        case 'dec':
-                        case 'decimal':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                    $output .= $this->make_number($this->vals[$i]);
-                                }
-                            break;
-                        case 'date':
-                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
-                                $output .= $this->vals[$i];
-                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "'" . $this->sloppydate($this->vals[$i], 'sql') . "'";
-                            }
-                            break;
-                        case 'time':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "'" . $this->make_time($this->vals[$i]) . "'";
-                            }
-                            break;
-                        case 'datetime':
-                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
-                                $output .= $this->vals[$i];
-                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif (!$this->isValidDateTime($this->vals[$i])) {
-                                if($this->nulls[$i])
-                                    $output .= "NULL";
-                                    else
-                                    $output .= "'0000-00-00 00:00:00'";
-                            } else {
-                                $output .= "'" . $this->sloppydate($this->vals[$i], 'sql') . ' ' . $this->sloppydate($this->vals[$i], 'datetime2time') . "'";
-                            }
-                            break;
-                        case 'raw':
-                            $output .= $this->vals[$i];
-                            break;
-                        case 'boolean':
-                            if ($this->_bool($this->vals[$i])) {
-                                $output .= 1;
-                            } else {
-                                    $output .= 0;
-                                }
-                            break;
-                        case 'email':
-                            if (filter_var($this->vals[$i], FILTER_VALIDATE_EMAIL)) {
-                                $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
-                            } elseif ($this->nulls[$i]) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "''";
-                            }
-                            break;
-                        case 'col':
-                        case 'column':
-                            $output .= "`" . $this->vals[$i] . "`";
-                            break;
-                        default:
-                            throw new Exception('sqlbuddy unknown handler: "' . $this->ints[$i] . '"');
-                            break;
-                    }
-                }
+        for ($i = 0; $i < count($this->keys); $i++) {
+            if ($isSet and $this->lb_mode and $i) {
+                $output .= ', ' . "\n";
+            } elseif ($i) {
+                $output .= ', ';
             }
-        } elseif ($m == 'set') {
-            for ($i = 0;$i < count($this->keys);$i++) {
-                if ($this->lb_mode and $i) {
-                    $output .= ', ' . "\n";
-                } elseif ($i) {
-                    $output .= ', ';
-                }
 
-                $output .= '`' . $this->keys[$i] . '`';
-                $output .= '=';
-                if ($this->safehtml) { // XSS_FIX
-                    // Data to process, $this->vals[$i]
-                    // We should add some safehtml logic here
-                }
+            if ($isSet) {
+                $output .= '`' . $this->keys[$i] . '`' . '=';
+            }
 
-                $from = mb_detect_encoding($this->vals[$i]);
-                if ($from === false) {
-                    $from = mb_detect_encoding($this->vals[$i], 'CP1252, ISO-8859-1, Windows-1251, ASCII, UTF-8');
-                }
-                if (!is_null($this->vals[$i]) AND ($from != 'UTF-8')) {
-                    $this->vals[$i] = mb_convert_encoding($this->vals[$i], 'UTF-8', $from);
-                }
+            if ($this->safehtml) { // XSS_FIX
+                // Data to process, $this->vals[$i]
+                // We should add some safehtml logic here
+            }
 
-                // Make ornull fields use the nulls[]
-                if ((mb_strlen($this->ints[$i]) > 8) and (substr($this->ints[$i], -6) == 'ornull')) {
-                    $this->ints[$i] = substr($this->ints[$i], 0, -6);
-                    $this->nulls[$i] = true;
-                }
-                if ($this->ints[$i] == 'ornull') {
-                    $this->ints[$i] = 'str';
-                    $this->nulls[$i] = true;
-                }
+            $desc = $this->normalize($i);
 
-
-                if ($this->considered_mysql_raw_value($this->vals[$i])) {
-                    $output .= $this->vals[$i];
+            if ($desc[0] === 'inline') {
+                $output .= $desc[1];
+            } else {
+                $style = $desc[2];
+                $value = $desc[3];
+                if ($style === 'quote') {
+                    $output .= "'" . mysqli_real_escape_string($mysqli, (string) $value) . "'";
                 } else {
-                    switch ($this->ints[$i]) {
-                        case 'str':
-                        case 'string':
-                        case 'text':
-                        case 'autostring':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
-                            }
-                            break;
-                        case 'int':
-                        case 'tinyint':
-                            if ($this->vals[$i] === 0) {
-                                $output .= (int) $this->vals[$i];
-                            } elseif ($this->vals[$i] === '0') {
-                                $output .= (int) $this->vals[$i];
-                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and empty($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= (int) $this->vals[$i];
-                            }
-                            break;
-                        case 'float':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                    $output .= "'" . (float) $this->make_number($this->vals[$i]) . "'";
-                                }
-                            break;
-                        case 'dec':
-                        case 'decimal':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                    $output .= $this->make_number($this->vals[$i]);
-                                }
-                            break;
-                        case 'date':
-                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
-                                $output .= $this->vals[$i];
-                            } elseif ($this->considered_mysql_raw_value($this->vals[$i])) {
-                                $output .= $this->vals[$i];
-                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $_v = $this->sloppydate($this->vals[$i], 'sql');
-                                if ($this->nulls[$i] and $this->considered_null_datetime($_v)) {
-                                    $output .= "NULL";
-                                } else {
-                                    $output .= "'" . $_v . "'";
-                                }
-                            }
-                            break;
-                        case 'time':
-                            if ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "'" . $this->make_time($this->vals[$i]) . "'";
-                            }
-                            break;
-                        case 'datetime':
-                            if ($this->considered_mysql_raw__date($this->vals[$i])) {
-                                $output .= $this->vals[$i];
-                            } elseif ($this->nulls[$i] and $this->considered_null($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif ($this->nulls[$i] and $this->considered_null_datetime($this->vals[$i])) {
-                                $output .= "NULL";
-                            } elseif (!$this->isValidDateTime($this->vals[$i])) {
-                                if($this->nulls[$i])
-                                    $output .= "NULL";
-                                    else
-                                    $output .= "'0000-00-00 00:00:00'";
-                            } else {
-                                $_v = $this->sloppydate($this->vals[$i], 'sql') . ' ' . $this->sloppydate($this->vals[$i], 'datetime2time');
-                                if ($this->nulls[$i] and $this->considered_null_datetime($_v)) {
-                                    $output .= "NULL";
-                                } else {
-                                    $output .= "'" . $_v . "'";
-                                }
-                            }
-                            break;
-                        case 'raw':
-                            $output .= $this->vals[$i];
-                            break;
-                        case 'boolean':
-                            if ($this->_bool($this->vals[$i])) {
-                                $output .= 1;
-                            } else {
-                                    $output .= 0;
-                                }
-                            break;
-                        case 'email':
-                            if (filter_var($this->vals[$i], FILTER_VALIDATE_EMAIL)) {
-                                $output .= "'" . mysqli_real_escape_string($mysqli, $this->vals[$i]) . "'";
-                            } elseif ($this->nulls[$i]) {
-                                $output .= "NULL";
-                            } else {
-                                $output .= "''";
-                            }
-                            break;
-                        case 'col':
-                        case 'column':
-                            $output .= "`" . $this->vals[$i] . "`";
-                            break;
-                        default:
-                            throw new Exception('sqlbuddy unknown handler: "' . $this->ints[$i] . '"');
-                            break;
-                    }
+                    $output .= $value;
                 }
             }
         }
@@ -894,7 +795,6 @@ class sqlbuddy
             $output .= "-&gt; reverse : " . $this->sloppydate($k, 'reverse') . "<br>\r\n";
             $output .= "-&gt; ddmmyyyy : " . $this->sloppydate($k, 'ddmmyyyy') . "<br>\r\n";
             $output .= "-&gt; yyyymmdd : " . $this->sloppydate($k, 'yyyymmdd') . "<br>\r\n";
-            $output .= "-&gt; sql : " . $this->sloppydate($k, 'sql') . "<br>\r\n";
             $k = '2005.5.31';
             $output .= "Third date = $k<br>\r\n";
             $output .= "-&gt; fix : " . $this->sloppydate($k, 'fix') . "<br>\r\n";
