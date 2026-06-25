@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.4.0'; // PHP82 - normalize() engine
+    public const version = '1.4.1'; // PHP82 - prepared_build()
 
     private $keys = [];
     private $vals = [];
@@ -635,6 +635,64 @@ class sqlbuddy
         } else {
             throw new Exception('sqlbuddy build error, invalid type. Only UPDATE and INSERT allowed');
         }
+    }
+
+    /**
+     * Prepared-statement sibling of build().
+     *
+     * Same engine (normalize), different emitter: every bindable value
+     * becomes a '?' with its mysqli type collected into $types, while
+     * inline fragments (NULL, NOW(), column refs, raw) are written
+     * verbatim into the query string - they can never be bound.
+     *
+     * The WHERE clause is taken raw, exactly like build(), and is NOT
+     * parameterized.
+     *
+     * @param string $what       'insert' | 'update'
+     * @param string $tablename
+     * @param string $where_match Required for UPDATE.
+     *
+     * @return array [ string $query, string $types, array $params ]
+     *               ready for $mysqli->prepared_insert($parts).
+     */
+    public function prepared_build($what, $tablename, $where_match = null)
+    {
+        $what = strtolower($what);
+
+        $cols    = []; // `col`              (INSERT key list)
+        $slots   = []; // ? | NULL | NOW()   (INSERT value list)
+        $assigns = []; // `col`=? | `col`=NULL ...  (UPDATE set list)
+        $types   = '';
+        $params  = [];
+
+        for ($i = 0; $i < count($this->keys); $i++) {
+            $desc = $this->normalize($i);
+
+            if ($desc[0] === 'inline') {
+                $frag = $desc[1];
+            } else {
+                $frag = '?';
+                $types  .= $desc[1];   // bind type: i | s | d
+                $params[] = $desc[3];  // unescaped value, bound by mysqli
+            }
+
+            $cols[]    = '`' . $this->keys[$i] . '`';
+            $slots[]   = $frag;
+            $assigns[] = '`' . $this->keys[$i] . '`=' . $frag;
+        }
+
+        if ($what === 'insert') {
+            $sql = 'INSERT INTO `' . $tablename . '` (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $slots) . ')';
+        } elseif ($what === 'update') {
+            if ($where_match === null) {
+                throw new Exception('sqlbuddy missing where match for building prepared update query');
+            }
+            $sql = 'UPDATE `' . $tablename . '` SET ' . implode(', ', $assigns) . ' WHERE ' . $where_match;
+        } else {
+            throw new Exception('sqlbuddy prepared_build error, invalid type. Only UPDATE and INSERT allowed');
+        }
+
+        return [$sql, $types, $params];
     }
 
     public function lb($cmd='', $conf=[])
