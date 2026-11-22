@@ -9,3 +9,4 @@ docs/*
 !docs/index.html
 !docs/sqlbuddy.manual.1.4.md
 !docs/sqlbuddy.manual.1.4.html
+!docs/sqlbuddy.manual.1.4.ultracompact.md
