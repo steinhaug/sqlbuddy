@@ -2,3 +2,10 @@ composer.lock
 mysqli_credentials.inc
 logs/
 vendor/
+
+# docs/: only the current sqlbuddy documentation is tracked.
+# New manual version: swap the filenames below and git rm the old manual.
+docs/*
+!docs/index.html
+!docs/sqlbuddy.manual.1.4.md
+!docs/sqlbuddy.manual.1.4.html

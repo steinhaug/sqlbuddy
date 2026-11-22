@@ -2,6 +2,8 @@
 
 Helper class for making sure SQL inserts and updates are not crashing anything.
 
+**Documentation:** [sqlbuddy manual 1.4](docs/sqlbuddy.manual.1.4.md) (Norwegian, also as [HTML](docs/sqlbuddy.manual.1.4.html)). Tests: `php test/regression.php`.
+
 <div class="show_none">
 
 # Table of Contents
@@ -31,6 +33,13 @@ The class builds the entire SQL query and makes sure that all data is escaped co
 Since v1.4.0 the same queued data can be emitted two ways: as a finished, escaped SQL string via `->build()` (the classic mode), or as a prepared-statement tuple via `->prepared_build()`. Both share one internal engine, so they always agree on how a value is treated.
 
 # 2. Version History
+
+    v1.4.4 - Updated 22 november 2026
+    * sloppydate() rewritten on one validated parse (fix() + checkdate()). No more fatal errors on
+      '22 11 2026', '', null, 'abc'. ddmmyyyy/reverse/yyyymmdd handle 2-digit years and trailing times,
+      output padded. sql rejects impossible dates (31.02 -> 0000-00-00). valid really validates.
+      int is now Ymd (20261122) instead of the sum of the parts. datetime2time pads (10:30:00).
+      Accepts double spaces and 'kl.' before the time.
 
     v1.4.3 - Updated 22 november 2026
     * date/datetime/time: lenient parsing. Accepts 2026-11-22 3:32:05 (date('G')), missing seconds,

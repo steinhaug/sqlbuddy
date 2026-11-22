@@ -1,6 +1,6 @@
 # sqlbuddy 1.4 – manual
 
-> Gjelder sqlbuddy **v1.4.x** (testet på v1.4.3, PHP 8.3, MySQL 8.0).
+> Gjelder sqlbuddy **v1.4.x** (testet på v1.4.4, PHP 8.3, MySQL 8.0).
 > Alle eksempler i denne manualen er kjørt mot klassen og viser faktisk output.
 
 ---
@@ -398,7 +398,7 @@ $sql->post('note',   'empty', 'string', true);  // null
 | `status()` | `true` hvis køen har minst én kolonne. Nyttig før `build()` på en tom update. |
 | `output('keys' \| 'values' \| 'set')` | Lavnivå: bare kolonnelisten, verdilisten eller SET-delen. |
 | `$sql->safehtml` | Offentlig egenskap, **har ingen effekt** i 1.4 (reservert). |
-| `sqlbuddy::version` | Versjonskonstant, f.eks. `'1.4.3'`. |
+| `sqlbuddy::version` | Versjonskonstant, f.eks. `'1.4.4'`. |
 
 ```php
 $sql = new sqlbuddy();
@@ -434,18 +434,38 @@ make_number('1.234,50'); // 1.234   ⚠ punktum som tusenskille støttes ikke
 make_number('1 234,50', true); // '1234.50'   (tallstreng, brukes av decimal)
 ```
 
-### `sloppydate($s, $action = 'ddmmyyyy')`
+### `sloppydate($s, $action = 'ddmmyyyy', $boolean = true)`
 
-Tolker datoer med `.`, `/`, `-`, `,` eller mellomrom som skille. Med `'sql'` returneres `Y-m-d`:
+Tolker «menneskedatoer»: dag først (`22.11.2026`, `22/11/26`, `22 11 2026`, `22,11,2026`) eller år først
+(`2026-11-22`, `2026.5.31`). Klokkeslett etter datoen ignoreres, også med `T`, dobbelt mellomrom eller `kl.`
+(`22.11.2026 kl 10:30`). Datoen valideres med `checkdate()`, så umulige datoer regnes som ugyldige.
+
+| Action | Resultat | `'22.11.26 10:30'` | Ugyldig |
+|--------|----------|--------------------|---------|
+| `'ddmmyyyy'` (standard) | `dd-mm-yyyy` | `'22-11-2026'` | `'00-00-0000'` |
+| `'sql'`, `'yyyymmdd'` | `yyyy-mm-dd` | `'2026-11-22'` | `'0000-00-00'` |
+| `'reverse'` | snur rekkefølgen: år først gir `dd/mm/yyyy`, dag først gir `yyyy/mm/dd` | `'2026/11/22'` | `'0000/00/00'` |
+| `'int'` | `Ymd` som tall, kan sorteres og sammenlignes | `20261122` | `0` |
+| `'valid'` | `bool`. Tom streng er gyldig når `$boolean = true` (valgfritt felt) | `true` | `false` |
+| `'datetime2time'` | `H:i:s` fra siste del (`10:30`, `10.30`, `9:5`) | `'10:30:00'` | `'00:00:00'` |
+| `'datetime2date'` | første del, uendret | `'22.11.26'` | – |
+| `'splitt'` | delene som array | `['22', '11', '26', '10:30']` | – |
+| `'fix'` | intern mellomform `dd/mm/yyyy` / `yyyy/mm/dd` | `'22/11/2026'` | `'0000-00-00'` |
 
 ```php
-sloppydate('31.12.2024', 'sql'); // 2024-12-31
-sloppydate('1/2/24', 'sql');     // 2024-02-01   (dd/mm/yy, år 20xx)
-sloppydate('2024.5.31', 'sql');  // 2024-05-31
-sloppydate('31122024', 'sql');   // 0000-00-00
+$sql->sloppydate('31.12.2024', 'sql');       // 2024-12-31
+$sql->sloppydate('1/2/24', 'sql');           // 2024-02-01   (dd/mm/yy, år 20xx)
+$sql->sloppydate('31.02.2026', 'sql');       // 0000-00-00   (finnes ikke)
+$sql->sloppydate('2026-11-22 10:30');        // 22-11-2026
+$sql->sloppydate('abc', 'valid');            // false
 ```
 
-Andre actions: `fix`, `reverse`, `ddmmyyyy`, `yyyymmdd`, `splitt`, `datetime2date`, `datetime2time`, `valid`, `test`.
+To-sifret år blir alltid 20xx (`'15.03.75'` → 2075). Følgende støttes ikke: månedsnavn (`22. nov 2026`),
+amerikansk `mm/dd/yyyy` og tall uten skilletegn (`20261122`).
+
+> Endret i 1.4.4: alle actions bygger på samme validerte tolkning. Før ga `ddmmyyyy`, `reverse`, `yyyymmdd`
+> og `int` fatal error på blant annet `'22 11 2026'`, `''` og `'abc'`, og feil svar for to-sifret år eller
+> verdier med klokkeslett. `valid` var alltid `true`, og `int` var summen dag + måned + år.
 
 ### `make_time($s)`, `isValidDateTime($s)`
 
@@ -471,13 +491,13 @@ Kolonnenavn kan ikke lenger bryte ut av backticks, men brukerdata bør likevel i
 
 **Tommelfingerregel:** brukerdata skal aldri inn i kolonnenavn, tabellnavn, WHERE, `raw` eller `col`
 uten at du har hvitlistet eller castet dem selv (`'id=' . (int) $id`).
-`public_html/buddyset-01.php` viser et eksempel på hva man **ikke** skal gjøre (`$_POST['name']` som kolonnenavn).
+Eksempel på hva man **ikke** skal gjøre: `$sql->que($_POST['name'], $_POST['value'])` (brukeren velger kolonnen).
 
 ---
 
 ## 16. Fallgruver og kjente begrensninger
 
-Alt her er verifisert i v1.4.3.
+Alt her er verifisert i v1.4.4.
 
 ### 16.1 Rettet i 1.4.3
 

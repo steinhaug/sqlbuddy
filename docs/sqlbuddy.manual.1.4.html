@@ -33,7 +33,7 @@ h2 + ul, h2 + ol{columns:2;column-gap:32px}
 <main>
 <h1 id="sqlbuddy-14--manual">sqlbuddy 1.4 – manual</h1>
 <blockquote>
-<p>Gjelder sqlbuddy <strong>v1.4.x</strong> (testet på v1.4.3, PHP 8.3, MySQL 8.0).
+<p>Gjelder sqlbuddy <strong>v1.4.x</strong> (testet på v1.4.4, PHP 8.3, MySQL 8.0).
 Alle eksempler i denne manualen er kjørt mot klassen og viser faktisk output.</p>
 </blockquote>
 <hr />
@@ -583,7 +583,7 @@ Er den satt, legges ingenting til.
 </tr>
 <tr>
 <td><code>sqlbuddy::version</code></td>
-<td>Versjonskonstant, f.eks. <code>'1.4.3'</code>.</td>
+<td>Versjonskonstant, f.eks. <code>'1.4.4'</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -620,14 +620,89 @@ make_number('abc');      // 0
 make_number('1.234,50'); // 1.234   ⚠ punktum som tusenskille støttes ikke
 make_number('1 234,50', true); // '1234.50'   (tallstreng, brukes av decimal)
 </code></pre>
-<h3 id="sloppydates-action--ddmmyyyy"><code>sloppydate($s, $action = 'ddmmyyyy')</code></h3>
-<p>Tolker datoer med <code>.</code>, <code>/</code>, <code>-</code>, <code>,</code> eller mellomrom som skille. Med <code>'sql'</code> returneres <code>Y-m-d</code>:</p>
-<pre><code class="language-php">sloppydate('31.12.2024', 'sql'); // 2024-12-31
-sloppydate('1/2/24', 'sql');     // 2024-02-01   (dd/mm/yy, år 20xx)
-sloppydate('2024.5.31', 'sql');  // 2024-05-31
-sloppydate('31122024', 'sql');   // 0000-00-00
+<h3 id="sloppydates-action--ddmmyyyy-boolean--true"><code>sloppydate($s, $action = 'ddmmyyyy', $boolean = true)</code></h3>
+<p>Tolker «menneskedatoer»: dag først (<code>22.11.2026</code>, <code>22/11/26</code>, <code>22 11 2026</code>, <code>22,11,2026</code>) eller år først
+(<code>2026-11-22</code>, <code>2026.5.31</code>). Klokkeslett etter datoen ignoreres, også med <code>T</code>, dobbelt mellomrom eller <code>kl.</code>
+(<code>22.11.2026 kl 10:30</code>). Datoen valideres med <code>checkdate()</code>, så umulige datoer regnes som ugyldige.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Resultat</th>
+<th><code>'22.11.26 10:30'</code></th>
+<th>Ugyldig</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'ddmmyyyy'</code> (standard)</td>
+<td><code>dd-mm-yyyy</code></td>
+<td><code>'22-11-2026'</code></td>
+<td><code>'00-00-0000'</code></td>
+</tr>
+<tr>
+<td><code>'sql'</code>, <code>'yyyymmdd'</code></td>
+<td><code>yyyy-mm-dd</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'0000-00-00'</code></td>
+</tr>
+<tr>
+<td><code>'reverse'</code></td>
+<td>snur rekkefølgen: år først gir <code>dd/mm/yyyy</code>, dag først gir <code>yyyy/mm/dd</code></td>
+<td><code>'2026/11/22'</code></td>
+<td><code>'0000/00/00'</code></td>
+</tr>
+<tr>
+<td><code>'int'</code></td>
+<td><code>Ymd</code> som tall, kan sorteres og sammenlignes</td>
+<td><code>20261122</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>'valid'</code></td>
+<td><code>bool</code>. Tom streng er gyldig når <code>$boolean = true</code> (valgfritt felt)</td>
+<td><code>true</code></td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>'datetime2time'</code></td>
+<td><code>H:i:s</code> fra siste del (<code>10:30</code>, <code>10.30</code>, <code>9:5</code>)</td>
+<td><code>'10:30:00'</code></td>
+<td><code>'00:00:00'</code></td>
+</tr>
+<tr>
+<td><code>'datetime2date'</code></td>
+<td>første del, uendret</td>
+<td><code>'22.11.26'</code></td>
+<td>–</td>
+</tr>
+<tr>
+<td><code>'splitt'</code></td>
+<td>delene som array</td>
+<td><code>['22', '11', '26', '10:30']</code></td>
+<td>–</td>
+</tr>
+<tr>
+<td><code>'fix'</code></td>
+<td>intern mellomform <code>dd/mm/yyyy</code> / <code>yyyy/mm/dd</code></td>
+<td><code>'22/11/2026'</code></td>
+<td><code>'0000-00-00'</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-php">$sql-&gt;sloppydate('31.12.2024', 'sql');       // 2024-12-31
+$sql-&gt;sloppydate('1/2/24', 'sql');           // 2024-02-01   (dd/mm/yy, år 20xx)
+$sql-&gt;sloppydate('31.02.2026', 'sql');       // 0000-00-00   (finnes ikke)
+$sql-&gt;sloppydate('2026-11-22 10:30');        // 22-11-2026
+$sql-&gt;sloppydate('abc', 'valid');            // false
 </code></pre>
-<p>Andre actions: <code>fix</code>, <code>reverse</code>, <code>ddmmyyyy</code>, <code>yyyymmdd</code>, <code>splitt</code>, <code>datetime2date</code>, <code>datetime2time</code>, <code>valid</code>, <code>test</code>.</p>
+<p>To-sifret år blir alltid 20xx (<code>'15.03.75'</code> → 2075). Følgende støttes ikke: månedsnavn (<code>22. nov 2026</code>),
+amerikansk <code>mm/dd/yyyy</code> og tall uten skilletegn (<code>20261122</code>).</p>
+<blockquote>
+<p>Endret i 1.4.4: alle actions bygger på samme validerte tolkning. Før ga <code>ddmmyyyy</code>, <code>reverse</code>, <code>yyyymmdd</code>
+og <code>int</code> fatal error på blant annet <code>'22 11 2026'</code>, <code>''</code> og <code>'abc'</code>, og feil svar for to-sifret år eller
+verdier med klokkeslett. <code>valid</code> var alltid <code>true</code>, og <code>int</code> var summen dag + måned + år.</p>
+</blockquote>
 <h3 id="make_times-isvaliddatetimes"><code>make_time($s)</code>, <code>isValidDateTime($s)</code></h3>
 <p><code>make_time('9:5')</code> gir <code>'09:05:00'</code>, og alt uten <code>:</code> gir <code>'00:00:00'</code>.
 <code>isValidDateTime()</code> er true kun for nøyaktig <code>Y-m-d H:i:s</code> (brukes ikke lenger internt).</p>
@@ -678,10 +753,10 @@ sloppydate('31122024', 'sql');   // 0000-00-00
 <p>Kolonnenavn kan ikke lenger bryte ut av backticks, men brukerdata bør likevel ikke bestemme <em>hvilken</em> kolonne som skrives.</p>
 <p><strong>Tommelfingerregel:</strong> brukerdata skal aldri inn i kolonnenavn, tabellnavn, WHERE, <code>raw</code> eller <code>col</code>
 uten at du har hvitlistet eller castet dem selv (<code>'id=' . (int) $id</code>).
-<code>public_html/buddyset-01.php</code> viser et eksempel på hva man <strong>ikke</strong> skal gjøre (<code>$_POST['name']</code> som kolonnenavn).</p>
+Eksempel på hva man <strong>ikke</strong> skal gjøre: <code>$sql-&gt;que($_POST['name'], $_POST['value'])</code> (brukeren velger kolonnen).</p>
 <hr />
 <h2 id="16-fallgruver-og-kjente-begrensninger">16. Fallgruver og kjente begrensninger</h2>
-<p>Alt her er verifisert i v1.4.3.</p>
+<p>Alt her er verifisert i v1.4.4.</p>
 <h3 id="161-rettet-i-143">16.1 Rettet i 1.4.3</h3>
 <p>Disse var feil i 1.4.2 og tidligere. Har du kode som omgår dem, kan omgåelsen fjernes:</p>
 <table>

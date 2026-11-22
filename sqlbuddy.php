@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.4.3'; // lenient datetime, NULL/decimal/prepared fixes
+    public const version = '1.4.4'; // sloppydate() rewrite
 
     private $keys = [];
     private $vals = [];
@@ -727,11 +727,8 @@ class sqlbuddy
             $val = trim($m[1]);
         }
 
-        if ($val !== '') {
-            $p = explode('-', $this->sloppydate($val, 'sql'));
-            if (count($p) === 3 and ctype_digit($p[0] . $p[1] . $p[2]) and checkdate((int) $p[1], (int) $p[2], (int) $p[0])) {
-                $date = sprintf('%04d-%02d-%02d', $p[0], $p[1], $p[2]);
-            }
+        if ($val !== '' and ($ymd = $this->sloppy_ymd($val)) !== null) {
+            $date = sprintf('%04d-%02d-%02d', ...$ymd);
         }
 
         return [$date, $time];
@@ -802,14 +799,17 @@ class sqlbuddy
     }
 
 
+    /**
+     * Sloppy date helper: reads human dates (day first, or ISO year first) and formats them.
+     *
+     * Actions: sql | yyyymmdd ('Y-m-d'), ddmmyyyy ('d-m-Y'), reverse, int (Ymd), valid (bool),
+     * fix (internal 'dd/mm/yyyy' | 'yyyy/mm/dd'), splitt, datetime2date, datetime2time ('H:i:s'), test.
+     * Invalid dates give the zero form of the action ('0000-00-00', '00-00-0000', 0, false).
+     */
     public function sloppydate($k, $action = 'ddmmyyyy', $boolean = true)
     {
-        $del = '-';
-        $k = trim($k);
-
-        if (str_contains($k, 'T')) {
-            $k = str_replace('T', ' ', $k);
-        }
+        // 'T' (datetime-local), repeated whitespace and Norwegian "kl." before the time
+        $k = trim(preg_replace(['/T/', '/\s+/', '/\s+kl\.?(?=\s|$)/i'], [' ', ' ', ''], (string) $k));
 
         if ($action == 'fix') {
             // If we have 0000-00-00 00:00:00 we need to remove the time
@@ -821,10 +821,7 @@ class sqlbuddy
                 $k = $t[0];
             }
 
-            $k = str_replace('.', '/', $k);
-            $k = str_replace(',', '/', $k);
-            $k = str_replace(' ', '/', $k);
-            $k = str_replace('-', '/', $k);
+            $k = trim(preg_replace('#[.,\s/-]+#', '/', $k), '/'); // "22. 11. 2026." -> 22/11/2026
 
             // If no slash probably a number,
             // so we failsafe atleast 0000-00-00
@@ -847,40 +844,25 @@ class sqlbuddy
                 return $t[0] . '/' . str_pad($t[1], 2, '0', STR_PAD_LEFT) . '/' . str_pad($t[2], 2, '0', STR_PAD_LEFT);
             }
         } elseif ($action == 'reverse') {
-            $t = $this->sloppydate($k, 'splitt');
-            return $t[2] . '/' . $t[1] . '/' . $t[0];
+            // Swaps the order: year-first input gives dd/mm/yyyy, day-first gives yyyy/mm/dd
+            $d = $this->sloppy_ymd($k);
+            $yearFirst = (bool) preg_match('/^\d{4}/', $k);
+            if ($d === null) {
+                return $yearFirst ? '00/00/0000' : '0000/00/00';
+            }
+            return $yearFirst ? sprintf('%02d/%02d/%04d', $d[2], $d[1], $d[0]) : sprintf('%04d/%02d/%02d', ...$d);
         } elseif ($action == 'ddmmyyyy') {
-            $t = $this->sloppydate($k, 'splitt');
-            if (strlen($t[2]) == 4) {
-                return $t[0] . $del . $t[1] . $del . $t[2];
-            } else {
-                return $t[2] . $del . $t[1] . $del . $t[0];
-            }
-        } elseif ($action == 'yyyymmdd') {
-            $t = $this->sloppydate($k, 'splitt');
-            if (strlen($t[2]) == 4) {
-                return $t[2] . $del . $t[1] . $del . $t[0];
-            } else {
-                return $t[0] . $del . $t[1] . $del . $t[2];
-            }
-        } elseif ($action == 'sql') {
-            $k = $this->sloppydate($k, 'fix');
-            return $this->sloppydate($k, 'yyyymmdd');
+            $d = $this->sloppy_ymd($k);
+            return $d === null ? '00-00-0000' : sprintf('%02d-%02d-%04d', $d[2], $d[1], $d[0]);
+        } elseif ($action == 'yyyymmdd' or $action == 'sql') {
+            $d = $this->sloppy_ymd($k);
+            return $d === null ? '0000-00-00' : sprintf('%04d-%02d-%02d', ...$d);
         } elseif ($action == 'splitt') {
-            if (preg_match('/-/', $k)) {
-                $splitter = "-";
-            }
-            if (preg_match("/\./", $k)) {
-                $splitter = '.';
-            }
-            if (preg_match('/\//', $k)) {
-                $splitter = '/';
-            }
-            $t = explode($splitter, $k);
-            return $t;
+            return preg_split('#[.,\s/-]+#', $k);
         } elseif ($action == 'int') {
-            $t = $this->sloppydate($k, 'splitt');
-            return (int) ($t[0] + $t[1] + $t[2]);
+            // Ymd as int: sortable/comparable, 0 for no date
+            $d = $this->sloppy_ymd($k);
+            return $d === null ? 0 : (int) sprintf('%04d%02d%02d', ...$d);
         } elseif ($action == 'test') {
             $output = "First date = $k<br>\r\n";
             $output .= "-&gt; fix : " . $this->sloppydate($k, 'fix') . "<br>\r\n";
@@ -906,26 +888,37 @@ class sqlbuddy
             $t = explode(' ', $k);
             return $t[0];
         } elseif ($action == 'datetime2time') {
+            // Time is the last space-separated part; ':', '.' or ',' between the parts (10:30, 10.30)
             $t = explode(' ', $k);
-            if (isset($t[1])) {
-                $t[1] = str_replace('.', ':', $t[1]);
-                $t[1] = str_replace(',', ':', $t[1]);
-                $t2 = explode(':', $t[1]);
-                return (int) $t2[0] . ':' . (int) $t2[1] . ':' . (int) $t2[2];
-            } else {
-                return '00:00:00';
+            if (count($t) > 1 and preg_match('/^(\d{1,2})[:.,](\d{1,2})(?:[:.,](\d{1,2}))?/', end($t), $m)) {
+                return sprintf('%02d:%02d:%02d', $m[1], $m[2], $m[3] ?? 0);
             }
+            return '00:00:00';
         } elseif ($action == 'valid') {
-            if ($boolean and !strlen($k)) {
+            // $boolean: an empty value counts as valid (an optional field left blank)
+            if ($boolean and $k === '') {
                 return true;
             }
-            $test = explode($del, $this->sloppydate($k, 'sql'));
-            if ((count($test) >= 3) and (strlen($test[0]) == 4) and (strlen($test[1]) and (strlen($test[1]) <= 3)) and (strlen($test[2]) and (strlen($test[2]) <= 3))) {
-                return true;
-            } else {
-                return false;
-            }
+            return $this->sloppy_ymd($k) !== null;
         }
+    }
+
+    /**
+     * The one place a sloppy date is read: fix() + 4-digit year + checkdate().
+     *
+     * @return array|null [int $y, int $m, int $d], null when not a real date
+     */
+    private function sloppy_ymd($k)
+    {
+        $p = explode('/', $this->sloppydate($k, 'fix'));
+        if (count($p) !== 3) {
+            return null;
+        }
+        [$y, $m, $d] = strlen($p[0]) === 4 ? $p : [$p[2], $p[1], $p[0]];
+        if (strlen($y) !== 4 or !ctype_digit($y . $m . $d) or !checkdate((int) $m, (int) $d, (int) $y)) {
+            return null;
+        }
+        return [(int) $y, (int) $m, (int) $d];
     }
 
     /**

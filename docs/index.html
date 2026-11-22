@@ -1,16 +1,29 @@
 <!DOCTYPE html>
 <html lang="no">
-  <head>
-    <meta charset="utf-8" />
-    <meta http-equiv="x-ua-compatible" content="ie=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <title>sqlbuddy class</title>
-
-    <link rel="icon" href="images/favicon.png" />
-  </head>
-  <body>
-    <h1>Hello sqlbuddy</h1>
-    <p>Run the /public_html for tests and usage..</p>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sqlbuddy docs</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1f21;--muted:#5c6166;--line:#e3e3df;--accent:#0b6e4f}
+@media (prefers-color-scheme: dark){:root{--bg:#16181a;--fg:#e4e4e1;--muted:#9aa0a6;--line:#2c2f33;--accent:#4fc39a}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:48px 16px}
+a{color:var(--accent)}
+li{margin:.4rem 0}
+p.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<h1>sqlbuddy</h1>
+<p>Query-bygger for INSERT og UPDATE i MySQL, med tolkning av verdier etter «menneskelogikk».</p>
+<ul>
+<li><a href="sqlbuddy.manual.1.4.html">Manual for sqlbuddy 1.4</a> (HTML)</li>
+<li><a href="sqlbuddy.manual.1.4.md">Manual for sqlbuddy 1.4</a> (Markdown)</li>
+<li><a href="https://github.com/steinhaug/sqlbuddy">Kildekode og README på GitHub</a></li>
+</ul>
+<p class="muted">Installasjon: <code>composer require steinhaug/sqlbuddy</code>. Tester: <code>php test/regression.php</code>.</p>
+</main>
+</body>
 </html>

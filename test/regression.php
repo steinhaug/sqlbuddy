@@ -56,6 +56,29 @@ check('decimal junk',        'dec',     'abc',      false, '?', ['0']);
 // identifiers
 check('col backtick',        'col', 'a`b', false, '`a``b`');
 
+// sloppydate() public actions
+$sd = new sqlbuddy();
+foreach ([
+    ['22.11.26', 'ddmmyyyy', '22-11-2026'],
+    ['2026-11-22 10:30:00', 'ddmmyyyy', '22-11-2026'],
+    ['22 11 2026', 'ddmmyyyy', '22-11-2026'],      // was a fatal ValueError
+    ['abc', 'ddmmyyyy', '00-00-0000'],              // was a fatal ValueError
+    ['22.11.2026 kl 10:30', 'sql', '2026-11-22'],
+    ['31.02.2026', 'sql', '0000-00-00'],
+    ['2026-11-22', 'reverse', '22/11/2026'],
+    ['1.2.2026', 'reverse', '2026/02/01'],
+    ['22.11.2026', 'int', 20261122],
+    ['abc', 'valid', false],                        // was true
+    ['', 'valid', true],
+    ['22.11.2026 10.30', 'datetime2time', '10:30:00'],
+    ['2026-11-22 9:5', 'datetime2time', '09:05:00'],
+] as [$in, $action, $want]) {
+    if (($got = $sd->sloppydate($in, $action)) !== $want) {
+        $fail++;
+        echo "FAIL sloppydate('$in', '$action'): got " . var_export($got, true) . ', want ' . var_export($want, true) . "\n";
+    }
+}
+
 try {
     $s = new sqlbuddy(); $s->que('price', 1, 'bogus'); $s->prepared_build('insert', 't');
     $fail++; echo "FAIL unknown handler: no exception\n";
