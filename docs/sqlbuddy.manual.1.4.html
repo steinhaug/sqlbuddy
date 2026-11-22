@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sqlbuddy 1.4 manual</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1f21;--muted:#5c6166;--line:#e3e3df;--code-bg:#f1f1ee;--accent:#0b6e4f;--warn-bg:#fff7e0;--warn-line:#e5b94e;--th:#f4f4f1}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#16181a;--fg:#e4e4e1;--muted:#9aa0a6;--line:#2c2f33;--code-bg:#202326;--accent:#4fc39a;--warn-bg:#2a2414;--warn-line:#8a6d1f;--th:#1d2023}}
+:root[data-theme="dark"]{--bg:#16181a;--fg:#e4e4e1;--muted:#9aa0a6;--line:#2c2f33;--code-bg:#202326;--accent:#4fc39a;--warn-bg:#2a2414;--warn-line:#8a6d1f;--th:#1d2023}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:32px 16px 96px}
+h1{font-size:2rem;margin:0 0 .5rem}
+h2{font-size:1.4rem;margin:3rem 0 1rem;padding-top:1rem;border-top:1px solid var(--line)}
+h3{font-size:1.1rem;margin:2rem 0 .5rem}
+a{color:var(--accent)}
+hr{border:0;border-top:1px solid var(--line);margin:2rem 0}
+code{font:.88em/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code-bg);padding:.1em .35em;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:auto;border:1px solid var(--line)}
+pre code{background:none;padding:0;font-size:.85rem}
+table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.92rem;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:var(--th)}
+blockquote{margin:1rem 0;padding:10px 16px;background:var(--warn-bg);border-left:4px solid var(--warn-line);border-radius:4px}
+blockquote p{margin:.3rem 0}
+h2 + ul, h2 + ol{columns:2;column-gap:32px}
+@media (max-width:640px){h2 + ul, h2 + ol{columns:1}}
+</style>
+</head>
+<body>
+<main>
+<h1 id="sqlbuddy-14--manual">sqlbuddy 1.4 – manual</h1>
+<blockquote>
+<p>Gjelder sqlbuddy <strong>v1.4.x</strong> (testet på v1.4.3, PHP 8.3, MySQL 8.0).
+Alle eksempler i denne manualen er kjørt mot klassen og viser faktisk output.</p>
+</blockquote>
+<hr />
+<h2 id="innhold">Innhold</h2>
+<ol>
+<li><a href="#1-hva-er-sqlbuddy">Hva er sqlbuddy</a></li>
+<li><a href="#2-installasjon-og-krav">Installasjon og krav</a></li>
+<li><a href="#3-kom-i-gang">Kom i gang</a></li>
+<li><a href="#4-hvordan-sqlbuddy-jobber">Hvordan sqlbuddy jobber</a></li>
+<li><a href="#5-que--legge-til-en-kolonne">que() – legge til en kolonne</a></li>
+<li><a href="#6-typer-parameter-3">Typer (parameter 3)</a></li>
+<li><a href="#7-null-håndtering">NULL-håndtering</a></li>
+<li><a href="#8-now-og-andre-sql-uttrykk">NOW() og andre SQL-uttrykk</a></li>
+<li><a href="#9-lengdebegrensning-n">Lengdebegrensning <code>:n</code></a></li>
+<li><a href="#10-build--ferdig-sql-streng">build() – ferdig SQL-streng</a></li>
+<li><a href="#11-prepared_build--prepared-statements">prepared_build() – prepared statements</a></li>
+<li><a href="#12-post--direkte-fra-skjema">post() – direkte fra skjema</a></li>
+<li><a href="#13-øvrige-metoder">Øvrige metoder</a></li>
+<li><a href="#14-hjelpefunksjoner">Hjelpefunksjoner</a></li>
+<li><a href="#15-sikkerhet--hva-som-escapes-og-hva-som-ikke-gjør-det">Sikkerhet – hva som escapes og hva som ikke gjør det</a></li>
+<li><a href="#16-fallgruver-og-kjente-begrensninger">Fallgruver og kjente begrensninger</a></li>
+<li><a href="#17-oppskrifter">Oppskrifter</a></li>
+<li><a href="#18-hurtigreferanse">Hurtigreferanse</a></li>
+</ol>
+<hr />
+<h2 id="1-hva-er-sqlbuddy">1. Hva er sqlbuddy</h2>
+<p>sqlbuddy er en liten query-bygger for <strong>INSERT</strong> og <strong>UPDATE</strong> i MySQL/MariaDB. Du legger til
+kolonner og verdier én og én, sier (valgfritt) hvilken type verdien er, og sqlbuddy
+lager en komplett og escapet SQL-spørring.</p>
+<p>Klassen er laget for butikk- og CRM-løsninger der data ofte kommer rett fra brukeren. Derfor
+er den bevisst «tilgivende». <code>"500,-"</code> blir <code>500</code>, <code>"31.12.2024"</code> blir <code>2024-12-31</code>, <code>"Yes"</code> blir <code>1</code>
+og en tom streng kan bli <code>NULL</code>. Det er altså mer enn en escaper. Den tolker verdien
+slik et menneske ville gjort.</p>
+<p>Siden v1.4.1 kan de samme dataene leveres på to måter:</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Resultat</th>
+<th>Bruk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-&gt;build()</code></td>
+<td>Ferdig SQL-streng, verdiene escapet og quotet</td>
+<td><code>$mysqli-&gt;query($sql)</code> (klassisk)</td>
+</tr>
+<tr>
+<td><code>-&gt;prepared_build()</code></td>
+<td><code>[query, types, params]</code> med <code>?</code> for verdiene</td>
+<td>Prepared statements (f.eks. via Mysqli2)</td>
+</tr>
+</tbody>
+</table>
+<p>Begge går gjennom samme interne motor (<code>normalize()</code>), så de tolker en verdi likt.</p>
+<hr />
+<h2 id="2-installasjon-og-krav">2. Installasjon og krav</h2>
+<pre><code class="language-bash">composer require steinhaug/sqlbuddy
+</code></pre>
+<pre><code class="language-php">require 'vendor/autoload.php';
+$sql = new sqlbuddy();
+</code></pre>
+<p>Klassen ligger i det globale navnerommet (ingen <code>namespace</code>) og lastes via PSR-0.</p>
+<p><strong>Krav</strong></p>
+<table>
+<thead>
+<tr>
+<th>Krav</th>
+<th>Hvorfor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PHP ≥ 8.0</td>
+<td><code>match</code>, <code>str_contains</code>, <code>str_starts_with</code></td>
+</tr>
+<tr>
+<td><code>ext-mbstring</code></td>
+<td>Lengdekutting og tegnsett-konvertering</td>
+</tr>
+<tr>
+<td><strong>Global <code>$mysqli</code></strong> (mysqli-tilkobling)</td>
+<td><code>build()</code> og <code>output()</code> bruker <code>global $mysqli</code> for <code>mysqli_real_escape_string()</code>. Uten den feiler <code>build()</code>. <code>prepared_build()</code> trenger den <strong>ikke</strong>.</td>
+</tr>
+<tr>
+<td>Global funksjon <code>logerror($msg)</code></td>
+<td>Brukes <strong>kun</strong> av <code>post()</code> når en verdi ikke er numerisk eller modus er ukjent. Mangler den, får du fatal error akkurat da.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-kom-i-gang">3. Kom i gang</h2>
+<pre><code class="language-php">$sql = new sqlbuddy();
+$sql-&gt;que('first', 'Kim');
+$sql-&gt;que('last',  'Steinhaug');
+$sql-&gt;que('age',   '51', 'int');
+
+echo $sql-&gt;build('insert', 'users');
+// INSERT INTO `users` (`first`, `last`, `age`) VALUES ('Kim', 'Steinhaug', 51)
+
+echo $sql-&gt;build('update', 'users', 'id=1');
+// UPDATE `users` SET `first`='Kim', `last`='Steinhaug', `age`=51 WHERE id=1
+</code></pre>
+<p>Samme data som prepared statement:</p>
+<pre><code class="language-php">[$query, $types, $params] = $sql-&gt;prepared_build('insert', 'users');
+// 'INSERT INTO `users` (`first`, `last`, `age`) VALUES (?, ?, ?)'
+// 'ssi'
+// ['Kim', 'Steinhaug', 51]
+
+$stmt = $mysqli-&gt;prepare($query);
+$stmt-&gt;bind_param($types, ...$params);
+$stmt-&gt;execute();
+</code></pre>
+<hr />
+<h2 id="4-hvordan-sqlbuddy-jobber">4. Hvordan sqlbuddy jobber</h2>
+<pre><code>que()/post()/unshift()  →  kø: [kolonne, verdi, type, nullable]
+                                        │
+                                 normalize()   ← all tolkning skjer her, én gang
+                                        │
+                ┌───────────────────────┴───────────────────────┐
+          build()/output()                               prepared_build()
+   'verdi' escapes + quotes                       ?  + type (i/s/d) + param
+</code></pre>
+<p><code>normalize()</code> gjør hver kø-rad om til én av to ting:</p>
+<ul>
+<li><strong>inline</strong>: skrives rett inn i SQL-en og kan aldri bli et <code>?</code>. Gjelder <code>NULL</code>, <code>NOW()</code>, kolonnereferanser
+  (<code>col</code>) og <code>raw</code>.</li>
+<li><strong>value</strong>: en vanlig verdi. <code>build()</code> escaper og (for strenger) quoter den, og <code>prepared_build()</code>
+  binder den som parameter.</li>
+</ul>
+<p>Rekkefølgen kolonnene legges til i, er rekkefølgen de får i SQL-en (<code>unshift()</code> legger først).</p>
+<hr />
+<h2 id="5-que--legge-til-en-kolonne">5. que() – legge til en kolonne</h2>
+<pre><code class="language-php">$sql-&gt;que(string $column, mixed $value, string|bool $type = 'autostring', mixed $nullable = 'autoNO');
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>$column</code></td>
+<td>Kolonnenavn. Pakkes i backticks, men <strong>escapes ikke</strong> (se <a href="#15-sikkerhet--hva-som-escapes-og-hva-som-ikke-gjør-det">15</a>).</td>
+</tr>
+<tr>
+<td><code>$value</code></td>
+<td>Verdien. Tolkes etter <code>$type</code>.</td>
+</tr>
+<tr>
+<td><code>$type</code></td>
+<td>Se <a href="#6-typer-parameter-3">6</a>. Standard <code>autostring</code> (= string). Kan få suffiks <code>ornull</code> og/eller <code>:n</code>.</td>
+</tr>
+<tr>
+<td><code>$nullable</code></td>
+<td>Skal en «tom» verdi bli SQL <code>NULL</code>? Godtar <strong>kun</strong> <code>true</code> eller strengen <code>'yes'</code> (alle fasonger). Alt annet er <em>ikke nullable</em>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Snarvei:</strong> <code>que($k, $v, true)</code> med bare tre parametre betyr <code>que($k, $v, 'string', true)</code>.</p>
+<pre><code class="language-php">$sql-&gt;que('note', '', true);     // `note`=NULL
+$sql-&gt;que('note', 'x', true);    // `note`='x'
+</code></pre>
+<p><code>push()</code> er et alias for <code>que()</code>.</p>
+<blockquote>
+<p>⚠ <code>$nullable = 1</code> eller <code>'true'</code> er <strong>ikke</strong> nullable (de matcher verken <code>true</code> eller <code>'yes'</code>).
+Bruk <code>true</code>, eller <code>ornull</code>-suffikset på typen.</p>
+</blockquote>
+<hr />
+<h2 id="6-typer-parameter-3">6. Typer (parameter 3)</h2>
+<p>Typenavn er <strong>case-sensitive</strong>. <code>'INT'</code> gir exception <code>sqlbuddy unknown handler: "INT" for column ...</code> (med kolonnenavnet).</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Tolkning</th>
+<th><code>build()</code></th>
+<th>PS-type</th>
+<th>Eksempel → resultat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>str</code>, <code>string</code>, <code>text</code>, <code>autostring</code></td>
+<td>Tekst</td>
+<td><code>'quotet'</code></td>
+<td><code>s</code></td>
+<td><code>"Kim's"</code> → <code>'Kim\'s'</code></td>
+</tr>
+<tr>
+<td><code>int</code>, <code>tinyint</code></td>
+<td><code>(int)</code> cast</td>
+<td>bar</td>
+<td><code>i</code></td>
+<td><code>'12 abc'</code> → <code>12</code>, <code>''</code> → <code>0</code></td>
+</tr>
+<tr>
+<td><code>float</code></td>
+<td><code>make_number()</code> → float</td>
+<td><code>'quotet'</code></td>
+<td><code>d</code></td>
+<td><code>'1 234,50'</code> → <code>'1234.5'</code></td>
+</tr>
+<tr>
+<td><code>dec</code>, <code>decimal</code></td>
+<td><code>make_number()</code> som tallstreng (full presisjon)</td>
+<td>bar</td>
+<td><code>s</code></td>
+<td><code>'kr 99,90'</code> → <code>99.90</code>, <code>'500,-'</code> → <code>500</code></td>
+</tr>
+<tr>
+<td><code>date</code></td>
+<td>Tilgivende (se <a href="#162-dato-og-tid">16.2</a>) → <code>Y-m-d</code></td>
+<td><code>'quotet'</code></td>
+<td><code>s</code></td>
+<td><code>'31.12.2024'</code> → <code>'2024-12-31'</code>, <code>'1/2/24'</code> → <code>'2024-02-01'</code></td>
+</tr>
+<tr>
+<td><code>time</code></td>
+<td>Tilgivende → <code>H:i:s</code></td>
+<td><code>'quotet'</code></td>
+<td><code>s</code></td>
+<td><code>'9:5'</code> → <code>'09:05:00'</code>, <code>'2026-11-22 3:32:05'</code> → <code>'03:32:05'</code></td>
+</tr>
+<tr>
+<td><code>datetime</code></td>
+<td>Tilgivende → <code>Y-m-d H:i:s</code></td>
+<td><code>'quotet'</code></td>
+<td><code>s</code></td>
+<td><code>'2026-11-22 3:32:05'</code> → <code>'2026-11-22 03:32:05'</code>, <code>'22.11.2026'</code> → <code>'2026-11-22 00:00:00'</code></td>
+</tr>
+<tr>
+<td><code>boolean</code></td>
+<td><code>_bool()</code> → 1/0</td>
+<td>bar</td>
+<td><code>i</code></td>
+<td><code>'Yes'</code> → <code>1</code>, <code>'FALSE'</code> → <code>0</code>, <code>''</code> → <code>0</code></td>
+</tr>
+<tr>
+<td><code>email</code></td>
+<td><code>FILTER_VALIDATE_EMAIL</code></td>
+<td><code>'quotet'</code></td>
+<td><code>s</code></td>
+<td>ugyldig → <code>''</code> (eller <code>NULL</code> hvis nullable)</td>
+</tr>
+<tr>
+<td><code>col</code>, <code>column</code></td>
+<td>Kolonnereferanse (backtick escapes)</td>
+<td><code>`verdi`</code></td>
+<td>inline</td>
+<td><code>'other_col'</code> → <code>`other_col`</code></td>
+</tr>
+<tr>
+<td><code>raw</code></td>
+<td>Skrives rått (<code>null</code> → <code>NULL</code>, <code>''</code> → <code>''</code>)</td>
+<td>som den er</td>
+<td>inline</td>
+<td><code>'hits+1'</code> → <code>hits+1</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="ornull-suffikset"><code>ornull</code>-suffikset</h3>
+<p>Legg <code>ornull</code> til en type for å gjøre den nullable uten fjerde parameter:
+<code>strornull</code>, <code>intornull</code>, <code>floatornull</code>, <code>decornull</code>, <code>dateornull</code>, <code>timeornull</code>,
+<code>datetimeornull</code>, <code>emailornull</code> … <code>ornull</code> alene = <code>strornull</code>.</p>
+<pre><code class="language-php">$sql-&gt;que('a', '', 'strornull');   // `a`=NULL
+$sql-&gt;que('a', '', 'string', true); // samme
+</code></pre>
+<blockquote>
+<p>Suffikset kombineres med lengde slik: <code>strornull:20</code> (ikke <code>str:20ornull</code>).</p>
+</blockquote>
+<hr />
+<h2 id="7-null-håndtering">7. NULL-håndtering</h2>
+<p>NULL er den vanskeligste delen av sqlbuddy, så her er reglene samlet.</p>
+<h3 id="71-regel-1-raw-skriver-null-slik-du-skriver-det">7.1 Regel 1: <code>raw</code> skriver NULL slik du skriver det</h3>
+<p>Den sikreste og mest brukte måten:</p>
+<pre><code class="language-php">$sql-&gt;que('name', 'null', 'raw');   // `name`=null
+$sql-&gt;que('name', null,   'raw');   // `name`=NULL
+</code></pre>
+<p>Strengen <code>'NULL'</code> gir også NULL i alle <strong>nullable</strong> typer (<code>que('name', 'NULL', 'strornull')</code>).
+I en <strong>ikke-nullable</strong> type lagres den som tekst (<code>'NULL'</code>). Den gamle regelen «<code>'NULL'</code> vinner alltid»
+er fjernet i 1.4.3, fordi den fikk spørringen til å krasje på <code>NOT NULL</code>-kolonner. Det verste som kan skje
+nå, er at teksten «NULL» blir lagret.</p>
+<h3 id="72-regel-2-uten-nullable-blir-det-aldri-null-bortsett-fra-raw">7.2 Regel 2: uten nullable blir det aldri NULL (bortsett fra <code>raw</code>)</h3>
+<pre><code class="language-php">$sql-&gt;que('name', 'null');   // `name`='null'   (en streng)
+$sql-&gt;que('name', 'NULL');   // `name`='NULL'   (en streng)
+$sql-&gt;que('name', null);     // `name`=''       (også i prepared_build)
+$sql-&gt;que('age',  null, 'int'); // `age`=0
+</code></pre>
+<h3 id="73-regel-3-med-nullable-blir-tomme-verdier-null">7.3 Regel 3: med nullable blir «tomme» verdier NULL</h3>
+<p>Med nullable (<code>true</code>, <code>'yes'</code> eller <code>*ornull</code>) gjelder dette:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Blir NULL når verdien er</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>string-typene</td>
+<td><code>null</code>, <code>false</code>, <code>''</code>, <code>'null'</code> (alle fasonger). <code>'0'</code> beholdes som <code>'0'</code>.</td>
+</tr>
+<tr>
+<td><code>int</code>, <code>tinyint</code></td>
+<td><code>null</code>, <code>false</code>, <code>''</code>, <code>'null'</code>. Merk: <code>0</code> / <code>'0'</code> blir <strong><code>0</code></strong>, ikke NULL.</td>
+</tr>
+<tr>
+<td><code>float</code>, <code>dec</code>, <code>decimal</code>, <code>time</code></td>
+<td><code>null</code>, <code>false</code>, <code>''</code>, <code>'null'</code></td>
+</tr>
+<tr>
+<td><code>date</code>, <code>datetime</code></td>
+<td>som over, + <code>'0000-00-00'</code>, <code>'0000-00-00 00:00:00'</code>, + alt som ikke er en gyldig dato (f.eks. <code>'2026-02-30'</code>)</td>
+</tr>
+<tr>
+<td><code>email</code></td>
+<td>ugyldig e-postadresse</td>
+</tr>
+<tr>
+<td><code>boolean</code>, <code>col</code></td>
+<td>bare for strengen <code>'NULL'</code></td>
+</tr>
+<tr>
+<td><code>raw</code></td>
+<td><code>null</code> (og <code>''</code> når nullable)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-php">$sql-&gt;que('n', 'null', 'string', true);  // NULL
+$sql-&gt;que('n', 'null', 'raw');           // null  (rått, skrives som det står)
+$sql-&gt;que('n', '0', 'strornull');        // '0'
+$sql-&gt;que('n', '0', 'intornull');        // 0
+</code></pre>
+<h3 id="74-oversikt-de-vanligste-variantene">7.4 Oversikt: de vanligste variantene</h3>
+<table>
+<thead>
+<tr>
+<th>Kall</th>
+<th><code>build()</code></th>
+<th><code>prepared_build()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>que('n', 'null', 'raw')</code></td>
+<td><code>null</code></td>
+<td>inline <code>null</code></td>
+</tr>
+<tr>
+<td><code>que('n', 'null')</code></td>
+<td><code>'null'</code></td>
+<td><code>?</code> = <code>"null"</code></td>
+</tr>
+<tr>
+<td><code>que('n', 'NULL')</code></td>
+<td><code>'NULL'</code></td>
+<td><code>?</code> = <code>"NULL"</code></td>
+</tr>
+<tr>
+<td><code>que('n', null)</code></td>
+<td><code>''</code></td>
+<td><code>?</code> = <code>""</code></td>
+</tr>
+<tr>
+<td><code>que('n', null, 'string', true)</code></td>
+<td><code>NULL</code></td>
+<td>inline <code>NULL</code></td>
+</tr>
+<tr>
+<td><code>que('n', 'null', true)</code></td>
+<td><code>NULL</code></td>
+<td>inline <code>NULL</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Anbefaling:</strong> Bruk ekte PHP <code>null</code> + nullable (<code>*ornull</code>) når du mener NULL. Da er intensjonen
+tydelig og uavhengig av hva brukeren skrev.</p>
+<hr />
+<h2 id="8-now-og-andre-sql-uttrykk">8. NOW() og andre SQL-uttrykk</h2>
+<p><code>'NOW()'</code> (store eller små bokstaver) blir SQL-funksjonen <code>NOW()</code> <strong>kun</strong> i typene
+<code>date</code>, <code>datetime</code>, <code>time</code> (og <code>raw</code>, som alltid er rått):</p>
+<pre><code class="language-php">$sql-&gt;que('created', 'NOW()', 'datetime');  // `created`=NOW()
+$sql-&gt;que('created', 'now()', 'date');      // `created`=NOW()
+$sql-&gt;que('created', 'NOW()');              // `created`='NOW()'   (en streng!)
+</code></pre>
+<p>Andre SQL-uttrykk må gå via <code>raw</code>:</p>
+<pre><code class="language-php">$sql-&gt;que('hits',    'hits+1',            'raw');  // `hits`=hits+1
+$sql-&gt;que('updated', 'CURRENT_TIMESTAMP', 'raw');
+$sql-&gt;que('copy',    'other_col',         'col');  // `copy`=`other_col`
+</code></pre>
+<hr />
+<h2 id="9-lengdebegrensning-n">9. Lengdebegrensning <code>:n</code></h2>
+<p>Alle typer kan få suffikset <code>:n</code>. Da kuttes verdien til maks <em>n</em> <strong>tegn</strong> (multibyte-sikkert)
+før den tolkes:</p>
+<pre><code class="language-php">$sql-&gt;que('code', 'Kimsteinhaug', 'string:3');  // 'Kim'
+$sql-&gt;que('code', 'Æøåæøå',       'string:3');  // 'Æøå'
+$sql-&gt;que('num',  '12345',        'int:3');     // 123
+$sql-&gt;que('code', null,           'string:3');  // ''     (null → '' i que() med :n)
+$sql-&gt;que('code', null,           'strornull:3'); // NULL
+</code></pre>
+<hr />
+<h2 id="10-build--ferdig-sql-streng">10. build() – ferdig SQL-streng</h2>
+<pre><code class="language-php">$sql-&gt;build(string $what, string $table, ?string $where = null): string
+</code></pre>
+<ul>
+<li><code>$what</code>: <code>'insert'</code> eller <code>'update'</code> (case-insensitive). Annet gir exception.</li>
+<li><code>$table</code>: pakkes i backticks, escapes ikke.</li>
+<li><code>$where</code>: <strong>påkrevd</strong> for update (exception uten). Settes inn <strong>rått</strong>, du er selv ansvarlig for escaping.</li>
+</ul>
+<pre><code class="language-php">echo $sql-&gt;build('update', 'users', 'id=' . (int) $id);
+</code></pre>
+<h3 id="linjeskift--debug-lb">Linjeskift / debug: <code>lb()</code></h3>
+<pre><code class="language-php">echo $sql-&gt;lb()-&gt;build('update', 't', 'id=1');
+// UPDATE `t` SET
+// `a`='x',
+// `b`=2
+// WHERE id=1
+
+echo $sql-&gt;lb('set')-&gt;build('update', 't', 'id=1');
+// Returnerer en HTML-formatert, justert oversikt (kolonne = verdi), IKKE gyldig SQL.
+// Kun til feilsøking i nettleser.
+</code></pre>
+<p><code>lb()</code> er «klistrete». Den gjelder resten av objektets levetid (også etter <code>flush()</code>).</p>
+<hr />
+<h2 id="11-prepared_build--prepared-statements">11. prepared_build() – prepared statements</h2>
+<pre><code class="language-php">$sql-&gt;prepared_build(string $what, string $table, ?string $where = null): array
+// returnerer [string $query, string $types, array $params]
+</code></pre>
+<ul>
+<li>Vanlige verdier blir <code>?</code>, typen samles i <code>$types</code> (<code>i</code>, <code>s</code>, <code>d</code>), og verdien legges <strong>uescapet</strong> i <code>$params</code>.</li>
+<li>Inline-verdier (<code>NULL</code>, <code>NOW()</code>, <code>col</code>, <code>raw</code>) skrives rett inn i spørringen og bindes ikke.</li>
+<li><code>$where</code> er rått, akkurat som i <code>build()</code>.</li>
+<li>Trenger ikke global <code>$mysqli</code>.</li>
+</ul>
+<pre><code class="language-php">$sql = new sqlbuddy();
+$sql-&gt;que('name',    'Kim');
+$sql-&gt;que('status',  null, 'ornull');
+$sql-&gt;que('created', 'NOW()', 'datetime');
+$sql-&gt;que('score',   '1.5', 'decimal');
+$sql-&gt;que('hits',    0, 'int');
+
+$sql-&gt;prepared_build('insert', 'stats');
+// [
+//   'INSERT INTO `stats` (`name`, `status`, `created`, `score`, `hits`) VALUES (?, NULL, NOW(), ?, ?)',
+//   'ssi',
+//   ['Kim', '1.5', 0]
+// ]
+</code></pre>
+<p>Med Mysqli2-klassen (egen pakke):</p>
+<pre><code class="language-php">$id   = $mysqli-&gt;prepared_insert($sql-&gt;prepared_build('insert', 'stats'));
+$rows = $mysqli-&gt;prepared_insert($sql-&gt;prepared_build('update', 'stats', 'id=' . (int) $id));
+</code></pre>
+<p>Hvis alle verdiene er inline, blir <code>$types</code> <code>''</code> og <code>$params</code> <code>[]</code>. Da må du ikke kalle
+<code>bind_param()</code> (mysqli feiler på tom typestreng).</p>
+<hr />
+<h2 id="12-post--direkte-fra-skjema">12. post() – direkte fra skjema</h2>
+<pre><code class="language-php">$sql-&gt;post(string $column, string $postKey, string $mode, bool $nullable = false);
+</code></pre>
+<p>Leser <code>$_POST[$postKey]</code> og legger den i køen.</p>
+<table>
+<thead>
+<tr>
+<th>Modus</th>
+<th>Mangler / tom</th>
+<th>Med nullable</th>
+<th>Ellers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>checkbox</code></td>
+<td><code>0</code></td>
+<td><code>null</code> (rått)</td>
+<td><code>1</code> hvis truthy</td>
+</tr>
+<tr>
+<td><code>str</code>, <code>string</code>, <code>text</code>, <code>input</code></td>
+<td><code>''</code></td>
+<td><code>null</code> hvis tom eller <code>'null'</code></td>
+<td>strengen (<code>:n</code> kutter)</td>
+</tr>
+<tr>
+<td><code>int</code></td>
+<td><code>0</code> hvis mangler</td>
+<td><code>null</code> hvis tom/<code>'null'</code></td>
+<td><code>(int)</code>. Logger via <code>logerror()</code> hvis ikke numerisk</td>
+</tr>
+<tr>
+<td><code>col</code>, <code>column</code></td>
+<td>(warning hvis mangler)</td>
+<td>–</td>
+<td>kolonnereferanse</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-php">// $_POST = ['chk' =&gt; 'on', 'name' =&gt; 'Kim', 'empty' =&gt; '']
+$sql-&gt;post('active', 'chk',   'checkbox');      // 1
+$sql-&gt;post('name',   'name',  'string:2');      // 'Ki'
+$sql-&gt;post('note',   'empty', 'string', true);  // null
+</code></pre>
+<blockquote>
+<p>⚠ Ukjent modus logges med <code>logerror()</code>, og verdien legges <strong>bare til hvis den mangler</strong> i <code>$_POST</code>.
+Er den satt, legges ingenting til.
+⚠ <code>post()</code> skriver NULL som rå <code>null</code> (små bokstaver), ikke <code>NULL</code>. SQL-messig er det likt.</p>
+</blockquote>
+<hr />
+<h2 id="13-øvrige-metoder">13. Øvrige metoder</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Beskrivelse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>unshift($k, $v, $type = 'string', $nullable = 'NO')</code></td>
+<td>Som <code>que()</code>, men legger kolonnen <strong>først</strong>.</td>
+</tr>
+<tr>
+<td><code>push(...)</code></td>
+<td>Alias for <code>que()</code>.</td>
+</tr>
+<tr>
+<td><code>flush()</code></td>
+<td>Tømmer køen så objektet kan gjenbrukes. (<code>lb()</code>-modus beholdes.)</td>
+</tr>
+<tr>
+<td><code>count_keys()</code></td>
+<td>Antall kolonner i køen.</td>
+</tr>
+<tr>
+<td><code>status()</code></td>
+<td><code>true</code> hvis køen har minst én kolonne. Nyttig før <code>build()</code> på en tom update.</td>
+</tr>
+<tr>
+<td><code>output('keys' \| 'values' \| 'set')</code></td>
+<td>Lavnivå: bare kolonnelisten, verdilisten eller SET-delen.</td>
+</tr>
+<tr>
+<td><code>$sql-&gt;safehtml</code></td>
+<td>Offentlig egenskap, <strong>har ingen effekt</strong> i 1.4 (reservert).</td>
+</tr>
+<tr>
+<td><code>sqlbuddy::version</code></td>
+<td>Versjonskonstant, f.eks. <code>'1.4.3'</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-php">$sql = new sqlbuddy();
+$sql-&gt;que('a', 'x'); $sql-&gt;que('b', 2, 'int');
+$sql-&gt;output('keys');    // `a`, `b`
+$sql-&gt;output('values');  // 'x', 2
+$sql-&gt;output('set');     // `a`='x', `b`=2
+</code></pre>
+<hr />
+<h2 id="14-hjelpefunksjoner">14. Hjelpefunksjoner</h2>
+<p>Alle er <code>public</code> og kan brukes direkte.</p>
+<h3 id="_boolvar-bool"><code>_bool($var): bool</code></h3>
+<p>Boolsk tolkning med «menneskelogikk», uavhengig av store og små bokstaver.</p>
+<table>
+<thead>
+<tr>
+<th>false</th>
+<th>true</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>false</code>, <code>null</code>, <code>[]</code>, <code>''</code>, <code>'   '</code>, <code>'false'</code>, <code>'no'</code>, <code>'off'</code>, <code>'null'</code>, <code>'[]'</code>, <code>'{}'</code>, <code>'0'</code>, <code>'00'</code>, <code>0</code>, <code>0.0</code></td>
+<td>objekter, ikke-tomme arrays, <code>'true'</code>, <code>'yes'</code>, <code>'on'</code>, tall ≠ 0, alle andre strenger (<code>'abc'</code>, <code>'-1'</code>, <code>'0.0'</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="make_numbers-as_string--false-intfloatstring"><code>make_number($s, $as_string = false): int|float|string</code></h3>
+<p>Tolker beløp: fjerner bokstaver og mellomrom samt <code>,-</code> / <code>.-</code> på slutten, og gjør <code>,</code> om til <code>.</code>.</p>
+<pre><code class="language-php">make_number('1 234,50'); // 1234.5
+make_number('500,-');    // 500
+make_number('abc');      // 0
+make_number('1.234,50'); // 1.234   ⚠ punktum som tusenskille støttes ikke
+make_number('1 234,50', true); // '1234.50'   (tallstreng, brukes av decimal)
+</code></pre>
+<h3 id="sloppydates-action--ddmmyyyy"><code>sloppydate($s, $action = 'ddmmyyyy')</code></h3>
+<p>Tolker datoer med <code>.</code>, <code>/</code>, <code>-</code>, <code>,</code> eller mellomrom som skille. Med <code>'sql'</code> returneres <code>Y-m-d</code>:</p>
+<pre><code class="language-php">sloppydate('31.12.2024', 'sql'); // 2024-12-31
+sloppydate('1/2/24', 'sql');     // 2024-02-01   (dd/mm/yy, år 20xx)
+sloppydate('2024.5.31', 'sql');  // 2024-05-31
+sloppydate('31122024', 'sql');   // 0000-00-00
+</code></pre>
+<p>Andre actions: <code>fix</code>, <code>reverse</code>, <code>ddmmyyyy</code>, <code>yyyymmdd</code>, <code>splitt</code>, <code>datetime2date</code>, <code>datetime2time</code>, <code>valid</code>, <code>test</code>.</p>
+<h3 id="make_times-isvaliddatetimes"><code>make_time($s)</code>, <code>isValidDateTime($s)</code></h3>
+<p><code>make_time('9:5')</code> gir <code>'09:05:00'</code>, og alt uten <code>:</code> gir <code>'00:00:00'</code>.
+<code>isValidDateTime()</code> er true kun for nøyaktig <code>Y-m-d H:i:s</code> (brukes ikke lenger internt).</p>
+<hr />
+<h2 id="15-sikkerhet--hva-som-escapes-og-hva-som-ikke-gjør-det">15. Sikkerhet – hva som escapes og hva som ikke gjør det</h2>
+<table>
+<thead>
+<tr>
+<th>Del</th>
+<th>Beskyttet?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Verdier i string/date/time/float/email-typer</td>
+<td>✅ <code>mysqli_real_escape_string</code> (build) / bundet (prepared)</td>
+</tr>
+<tr>
+<td>Verdier i int/tinyint/boolean</td>
+<td>✅ castet til tall</td>
+</tr>
+<tr>
+<td>Verdier i dec/decimal</td>
+<td>✅ <code>make_number()</code> gir alltid tall</td>
+</tr>
+<tr>
+<td>Kolonnenavn (<code>$column</code>)</td>
+<td>✅ backticks, og backtick i navnet dobles</td>
+</tr>
+<tr>
+<td><strong>Tabellnavn</strong></td>
+<td>❌ kun backticks</td>
+</tr>
+<tr>
+<td><strong>WHERE</strong></td>
+<td>❌ settes inn rått</td>
+</tr>
+<tr>
+<td>Verdier i <strong><code>raw</code></strong></td>
+<td>❌ settes inn rått</td>
+</tr>
+<tr>
+<td>Verdier i <code>col</code>/<code>column</code></td>
+<td>✅ som kolonnenavn</td>
+</tr>
+</tbody>
+</table>
+<p>Kolonnenavn kan ikke lenger bryte ut av backticks, men brukerdata bør likevel ikke bestemme <em>hvilken</em> kolonne som skrives.</p>
+<p><strong>Tommelfingerregel:</strong> brukerdata skal aldri inn i kolonnenavn, tabellnavn, WHERE, <code>raw</code> eller <code>col</code>
+uten at du har hvitlistet eller castet dem selv (<code>'id=' . (int) $id</code>).
+<code>public_html/buddyset-01.php</code> viser et eksempel på hva man <strong>ikke</strong> skal gjøre (<code>$_POST['name']</code> som kolonnenavn).</p>
+<hr />
+<h2 id="16-fallgruver-og-kjente-begrensninger">16. Fallgruver og kjente begrensninger</h2>
+<p>Alt her er verifisert i v1.4.3.</p>
+<h3 id="161-rettet-i-143">16.1 Rettet i 1.4.3</h3>
+<p>Disse var feil i 1.4.2 og tidligere. Har du kode som omgår dem, kan omgåelsen fjernes:</p>
+<table>
+<thead>
+<tr>
+<th>Før (≤ 1.4.2)</th>
+<th>Nå (1.4.3)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>datetime</code> krevde nøyaktig <code>Y-m-d H:i:s</code>, så <code>date('Y-m-d G:i:s')</code> før kl. 10, <code>T</code>, uten sekunder og norsk format ble <code>0000-00-00 00:00:00</code></td>
+<td>Tilgivende parsing, se 16.2</td>
+</tr>
+<tr>
+<td><code>datetime</code> skrev <code>'2024-12-31 9:5:3'</code></td>
+<td><code>'2024-12-31 09:05:03'</code></td>
+</tr>
+<tr>
+<td><code>'now()'</code> (små bokstaver) i <code>date</code>/<code>datetime</code> ble nulldato</td>
+<td><code>NOW()</code></td>
+</tr>
+<tr>
+<td><code>'NULL'</code> ga NULL i alle typer, og krasjet på <code>NOT NULL</code></td>
+<td>NULL bare når nullable, ellers tekst</td>
+</tr>
+<tr>
+<td><code>'0'</code> ble NULL i nullable string</td>
+<td><code>'0'</code></td>
+</tr>
+<tr>
+<td><code>prepared_build()</code> bandt PHP <code>null</code> som NULL (<code>Column cannot be null</code>)</td>
+<td>binder <code>''</code>, som <code>build()</code></td>
+</tr>
+<tr>
+<td><code>decimal</code> mistet presisjon (<code>1.0E+14</code>)</td>
+<td>tallstreng, eksakt</td>
+</tr>
+<tr>
+<td><code>raw</code> med <code>null</code> / <code>''</code> ga <code>VALUES ()</code></td>
+<td><code>NULL</code> / <code>''</code></td>
+</tr>
+<tr>
+<td>Backtick i kolonnenavn ble ikke escapet</td>
+<td>escapes</td>
+</tr>
+<tr>
+<td><code>time</code> med datetime-verdi ga hele datetime-strengen</td>
+<td>bare klokkeslettet</td>
+</tr>
+</tbody>
+</table>
+<h3 id="162-dato-og-tid">16.2 Dato og tid</h3>
+<p>Typene <code>date</code>, <code>datetime</code> og <code>time</code> godtar:</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th><code>datetime</code></th>
+<th><code>date</code></th>
+<th><code>time</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'2026-11-22 03:32:05'</code></td>
+<td><code>'2026-11-22 03:32:05'</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'03:32:05'</code></td>
+</tr>
+<tr>
+<td><code>'2026-11-22 3:32:05'</code> (<code>date('G')</code>)</td>
+<td><code>'2026-11-22 03:32:05'</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'03:32:05'</code></td>
+</tr>
+<tr>
+<td><code>'2026-11-22 10:30'</code></td>
+<td><code>'2026-11-22 10:30:00'</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'10:30:00'</code></td>
+</tr>
+<tr>
+<td><code>'2026-11-22T10:30'</code> (HTML <code>datetime-local</code>)</td>
+<td><code>'2026-11-22 10:30:00'</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'10:30:00'</code></td>
+</tr>
+<tr>
+<td><code>'2026-11-22'</code></td>
+<td><code>'2026-11-22 00:00:00'</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'00:00:00'</code></td>
+</tr>
+<tr>
+<td><code>'22.11.2026 10:30'</code></td>
+<td><code>'2026-11-22 10:30:00'</code></td>
+<td><code>'2026-11-22'</code></td>
+<td><code>'10:30:00'</code></td>
+</tr>
+<tr>
+<td><code>'1/2/26'</code></td>
+<td><code>'2026-02-01 00:00:00'</code></td>
+<td><code>'2026-02-01'</code></td>
+<td><code>'00:00:00'</code></td>
+</tr>
+<tr>
+<td><code>'9:5'</code></td>
+<td>ugyldig</td>
+<td>ugyldig</td>
+<td><code>'09:05:00'</code></td>
+</tr>
+<tr>
+<td><code>'25:00'</code> (varighet)</td>
+<td>ugyldig</td>
+<td>ugyldig</td>
+<td><code>'25:00:00'</code></td>
+</tr>
+</tbody>
+</table>
+<p>Datodelen tolkes med <code>sloppydate()</code> (dag først: <code>dd.mm.yyyy</code>, <code>dd/mm/yy</code>, eller <code>yyyy-mm-dd</code>, <code>yyyy.m.d</code>) og
+valideres med <code>checkdate()</code>, så <code>'2026-02-30'</code> er ugyldig. Amerikansk <code>mm/dd/yyyy</code> støttes ikke.</p>
+<p><strong>Ugyldig dato:</strong> blir <code>NULL</code> hvis nullable, ellers <code>'0000-00-00'</code> / <code>'0000-00-00 00:00:00'</code>.
+MySQL i strict mode med <code>NO_ZERO_DATE</code> avviser nulldato, så bruk <code>dateornull</code>/<code>datetimeornull</code> på felt som kan være tomme.</p>
+<h3 id="163-øvrig">16.3 Øvrig</h3>
+<ul>
+<li>Typenavn er case-sensitive (<code>'INT'</code> gir exception).</li>
+<li><code>$nullable</code> godtar bare <code>true</code> / <code>'yes'</code>.</li>
+<li><code>make_number('1.234,50')</code> gir <code>1.234</code> (punktum som tusenskille støttes ikke).</li>
+<li><code>post()</code> krever global <code>logerror()</code>, og <code>build()</code> krever global <code>$mysqli</code>.</li>
+<li><code>lb()</code> kan ikke slås av igjen på samme objekt.</li>
+<li>Tabellnavnet escapes ikke (bare backticks).</li>
+<li><code>email</code> med ugyldig adresse blir <code>''</code> uten advarsel (eller <code>NULL</code> når nullable).</li>
+</ul>
+<hr />
+<h2 id="17-oppskrifter">17. Oppskrifter</h2>
+<h3 id="insert-og-hent-id">Insert og hent id</h3>
+<pre><code class="language-php">$sql = new sqlbuddy();
+$sql-&gt;que('email',   $email, 'email');
+$sql-&gt;que('name',    $name, 'string:100');
+$sql-&gt;que('phone',   $phone, 'strornull:20');
+$sql-&gt;que('created', 'NOW()', 'datetime');
+$mysqli-&gt;query($sql-&gt;build('insert', 'customers'));
+$id = $mysqli-&gt;insert_id;
+</code></pre>
+<h3 id="update--bare-hvis-noe-er-endret">Update – bare hvis noe er endret</h3>
+<pre><code class="language-php">$sql = new sqlbuddy();
+if ($name !== $old['name'])  $sql-&gt;que('name', $name);
+if ($price !== $old['price']) $sql-&gt;que('price', $price, 'decimal');
+
+if ($sql-&gt;status()) {
+    $mysqli-&gt;query($sql-&gt;build('update', 'products', 'id=' . (int) $id));
+}
+</code></pre>
+<h3 id="gjenbruk-i-løkke">Gjenbruk i løkke</h3>
+<pre><code class="language-php">$sql = new sqlbuddy();
+foreach ($rows as $r) {
+    $sql-&gt;flush();
+    $sql-&gt;que('sku', $r['sku'], 'string:32');
+    $sql-&gt;que('qty', $r['qty'], 'int');
+    $mysqli-&gt;query($sql-&gt;build('insert', 'stock'));
+}
+</code></pre>
+<h3 id="prepared-statement-uten-mysqli2">Prepared statement uten Mysqli2</h3>
+<pre><code class="language-php">[$q, $types, $params] = $sql-&gt;prepared_build('update', 'users', 'id=' . (int) $id);
+$stmt = $mysqli-&gt;prepare($q);
+if ($types !== '') {
+    $stmt-&gt;bind_param($types, ...$params);
+}
+$stmt-&gt;execute();
+</code></pre>
+<h3 id="skjema-med-checkbox-og-valgfrie-felt">Skjema med checkbox og valgfrie felt</h3>
+<pre><code class="language-php">$sql = new sqlbuddy();
+$sql-&gt;post('newsletter', 'newsletter', 'checkbox');
+$sql-&gt;post('company',    'company',    'string:100', true); // tom → NULL
+$sql-&gt;post('employees',  'employees',  'int', true);
+$mysqli-&gt;query($sql-&gt;build('update', 'customers', 'id=' . (int) $id));
+</code></pre>
+<h3 id="teller--uttrykk">Teller / uttrykk</h3>
+<pre><code class="language-php">$sql-&gt;que('views', 'views+1', 'raw');
+$sql-&gt;que('last_seen', 'NOW()', 'datetime');
+</code></pre>
+<hr />
+<h2 id="18-hurtigreferanse">18. Hurtigreferanse</h2>
+<pre><code class="language-php">$sql = new sqlbuddy();
+
+$sql-&gt;que($col, $val);                    // string
+$sql-&gt;que($col, $val, 'int');             // int, tinyint, float, dec, decimal
+$sql-&gt;que($col, $val, 'date');            // date, time, datetime
+$sql-&gt;que($col, $val, 'boolean');         // 1/0 via _bool()
+$sql-&gt;que($col, $val, 'email');
+$sql-&gt;que($col, $val, 'raw');             // rått SQL-uttrykk
+$sql-&gt;que($col, $val, 'col');             // `kolonne`
+$sql-&gt;que($col, $val, 'strornull');       // tom → NULL   (*ornull for alle typer)
+$sql-&gt;que($col, $val, 'string', true);    // samme som over
+$sql-&gt;que($col, $val, true);              // samme som over
+$sql-&gt;que($col, $val, 'string:50');       // kutt til 50 tegn
+$sql-&gt;que($col, 'null', 'raw');           // NULL
+$sql-&gt;que($col, 'NOW()', 'datetime');     // NOW()  (også date/time, alle fasonger)
+
+$sql-&gt;build('insert', $table);
+$sql-&gt;build('update', $table, $where);
+$sql-&gt;prepared_build('insert', $table);              // [query, types, params]
+$sql-&gt;prepared_build('update', $table, $where);
+
+$sql-&gt;flush(); $sql-&gt;status(); $sql-&gt;count_keys();
+</code></pre>
+</main>
+</body>
+</html>

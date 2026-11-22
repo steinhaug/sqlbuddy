@@ -32,6 +32,24 @@ Since v1.4.0 the same queued data can be emitted two ways: as a finished, escape
 
 # 2. Version History
 
+    v1.4.3 - Updated 22 november 2026
+    * date/datetime/time: lenient parsing. Accepts 2026-11-22 3:32:05 (date('G')), missing seconds,
+      date only, T (datetime-local) and norwegian 22.11.2026. Output always padded Y-m-d H:i:s.
+      Previously all of these silently became 0000-00-00 00:00:00.
+    * NOW() is recognized in any case ('now()') in date, datetime and time modes.
+    * Literal 'NULL' only becomes NULL in nullable modes (or raw). In a NOT NULL column it is kept as text
+      instead of crashing the query.
+    * Nullable string modes keep '0' (was NULL).
+    * prepared_build() binds '' for PHP null in non-nullable string modes, same as build() (was NULL -> crash).
+    * dec/decimal keep full precision: rendered/bound as a numeric string ('s'), not via float.
+    * raw with null -> NULL, empty raw -> '' (was invalid SQL "VALUES ()").
+    * Backticks in column names and col/column values are escaped.
+    * Unknown type exception names the column.
+
+    v1.4.2 - Updated 22 november 2026
+    * _bool() v2: case-insensitive ('FALSE', 'No', 'Null' now false), '[]'/'{}' false,
+      no warning on arrays, no fatal error on objects. Removed the '_SESSION' 2nd param.
+
     v1.4.1 - Updated 25 june 2026
     + Added prepared_build() - emits [query, types, params] for prepared statements.
       Shares the normalize() engine with build(), so value handling is identical.
@@ -147,7 +165,7 @@ Will evaluate as:
     $parts = $sql->prepared_build('insert', 'table_name');
     $parts = $sql->prepared_build('update', 'table_name', 'id=' . $id);
 
-`types` uses the mysqli letters: `i` integer, `s` string, `d` double. Decimal and float both bind as `d`.
+`types` uses the mysqli letters: `i` integer, `s` string, `d` double. Float binds as `d`; decimal binds as `s` (numeric string) so it keeps full precision.
 
 Drop-in against a wrapper that accepts the tuple:
 
@@ -161,9 +179,9 @@ Most values become a bound `?`. Four cases can never be bound and are written li
 - `raw` mode (e.g. an explicit SQL function or literal you placed yourself)
 - `col` / `column` mode (a backtick-quoted column reference)
 - a real `NULL` (from `nullable` handling, the `*ornull` modes, or the literal string `'NULL'`)
-- `NOW()` **but only** in `date`, `datetime` or `raw` mode
+- `NOW()` (any case) **but only** in `date`, `datetime`, `time` or `raw` mode
 
-Note the `NOW()` rule: it is auto-recognized as a raw SQL function only inside the date/datetime/raw modes. In `string` / `autostring` mode the text `'NOW()'` is treated as an ordinary string value and becomes a bound parameter - it is not turned into the SQL function. Only the literal `'NULL'` is recognized across every mode.
+Note the `NOW()` rule: it is auto-recognized as a raw SQL function only inside the date/datetime/time/raw modes. In `string` / `autostring` mode the text `'NOW()'` is treated as an ordinary string value and becomes a bound parameter - it is not turned into the SQL function. The literal `'NULL'` becomes a real NULL in every nullable mode; in a non-nullable mode it is kept as text.
 
 Example:
 
@@ -180,8 +198,8 @@ Example:
     // [
     //   'INSERT INTO `stats` (`name`, `status`, `created`, `score`, `hits`)
     //        VALUES (?, NULL, NOW(), ?, ?)',
-    //   'sdi',
-    //   ['Kim', 1.5, 0]
+    //   'ssi',
+    //   ['Kim', '1.5', 0]
     // ]
 
 Values are bound **unescaped** - mysqli escapes them at bind time. The `WHERE` clause passed to an update is taken raw and is **not** parameterized, identical to `->build()`.

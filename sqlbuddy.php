@@ -8,7 +8,7 @@
  */
 class sqlbuddy
 {
-    public const version = '1.4.1'; // PHP82 - prepared_build()
+    public const version = '1.4.3'; // lenient datetime, NULL/decimal/prepared fixes
 
     private $keys = [];
     private $vals = [];
@@ -107,11 +107,7 @@ class sqlbuddy
 
     public function considered_mysql_raw__date($val)
     {
-        if ($val === 'NOW()') {
-            return true;
-        }
-
-        return false;
+        return is_string($val) && strcasecmp(trim($val), 'NOW()') === 0;
     }
 
     public function count_keys()
@@ -395,9 +391,10 @@ class sqlbuddy
             }
         }
 
-        // Literal 'NULL' wins over every mode.
-        if ($this->considered_mysql_raw_value($val)) {
-            return ['inline', $val];
+        // Literal 'NULL' wins over every mode, but only for nullable columns -
+        // in a NOT NULL column it would crash the query, so it is kept as text.
+        if ($null and $this->considered_mysql_raw_value($val)) {
+            return ['inline', 'NULL'];
         }
 
         switch ($mode) {
@@ -405,10 +402,11 @@ class sqlbuddy
             case 'string':
             case 'text':
             case 'autostring':
-                if ($null and ($this->considered_null($val) or empty($val))) {
+                if ($null and $this->considered_null($val)) {
                     return ['inline', 'NULL'];
                 }
-                return ['value', 's', 'quote', $val];
+                // (string) so prepared_build() binds '' for null, same as build()
+                return ['value', 's', 'quote', (string) $val];
 
             case 'int':
             case 'tinyint':
@@ -431,44 +429,39 @@ class sqlbuddy
                 if ($null and $this->considered_null($val)) {
                     return ['inline', 'NULL'];
                 }
-                return ['value', 'd', 'bare', $this->make_number($val)];
+                // Numeric string, not float: bound as 's' so DECIMAL keeps full precision.
+                return ['value', 's', 'bare', $this->make_number($val, true)];
 
             case 'date':
-                if ($this->considered_mysql_raw__date($val)) {
-                    return ['inline', $val];
-                }
-                if ($null and ($this->considered_null($val) or $this->considered_null_datetime($val))) {
-                    return ['inline', 'NULL'];
-                }
-                $d = $this->sloppydate($val, 'sql');
-                if ($null and $this->considered_null_datetime($d)) {
-                    return ['inline', 'NULL'];
-                }
-                return ['value', 's', 'quote', $d];
-
             case 'time':
+            case 'datetime':
+                if ($this->considered_mysql_raw__date($val)) {
+                    return ['inline', 'NOW()'];
+                }
                 if ($null and $this->considered_null($val)) {
                     return ['inline', 'NULL'];
                 }
-                return ['value', 's', 'quote', $this->make_time($val)];
-
-            case 'datetime':
-                if ($this->considered_mysql_raw__date($val)) {
-                    return ['inline', $val];
+                [$d, $t] = $this->parse_datetime($val);
+                if ($mode === 'time') {
+                    // Unparsable keeps the old make_time() result (durations like 25:00, -1:00).
+                    return ['value', 's', 'quote', $t ?? $this->make_time((string) $val)];
                 }
-                if ($null and ($this->considered_null($val) or $this->considered_null_datetime($val))) {
-                    return ['inline', 'NULL'];
+                if ($d === null) {
+                    if ($null) {
+                        return ['inline', 'NULL'];
+                    }
+                    $d = '0000-00-00';
+                    $t = '00:00:00';
                 }
-                if (!$this->isValidDateTime($val)) {
-                    return $null ? ['inline', 'NULL'] : ['inline', "'0000-00-00 00:00:00'"];
-                }
-                $dt = $this->sloppydate($val, 'sql') . ' ' . $this->sloppydate($val, 'datetime2time');
-                if ($null and $this->considered_null_datetime($dt)) {
-                    return ['inline', 'NULL'];
-                }
-                return ['value', 's', 'quote', $dt];
+                return ['value', 's', 'quote', $mode === 'date' ? $d : $d . ' ' . ($t ?? '00:00:00')];
 
             case 'raw':
+                if ($val === null) {
+                    return ['inline', 'NULL'];
+                }
+                if ((string) $val === '') { // empty raw would be invalid SQL: VALUES ()
+                    return ['inline', $null ? 'NULL' : "''"];
+                }
                 return ['inline', $val];
 
             case 'boolean':
@@ -485,10 +478,10 @@ class sqlbuddy
 
             case 'col':
             case 'column':
-                return ['inline', '`' . $val . '`'];
+                return ['inline', $this->quote_ident($val)];
 
             default:
-                throw new Exception('sqlbuddy unknown handler: "' . $mode . '"');
+                throw new Exception('sqlbuddy unknown handler: "' . $mode . '" for column `' . $this->keys[$i] . '`');
         }
     }
 
@@ -517,7 +510,7 @@ class sqlbuddy
                 if ($i) {
                     $output .= ', ';
                 }
-                $output .= '`' . $this->keys[$i] . '`';
+                $output .= $this->quote_ident($this->keys[$i]);
             }
             return $output;
         }
@@ -534,7 +527,7 @@ class sqlbuddy
             }
 
             if ($isSet) {
-                $output .= '`' . $this->keys[$i] . '`' . '=';
+                $output .= $this->quote_ident($this->keys[$i]) . '=';
             }
 
             if ($this->safehtml) { // XSS_FIX
@@ -676,9 +669,9 @@ class sqlbuddy
                 $params[] = $desc[3];  // unescaped value, bound by mysqli
             }
 
-            $cols[]    = '`' . $this->keys[$i] . '`';
+            $cols[]    = $this->quote_ident($this->keys[$i]);
             $slots[]   = $frag;
-            $assigns[] = '`' . $this->keys[$i] . '`=' . $frag;
+            $assigns[] = $this->quote_ident($this->keys[$i]) . '=' . $frag;
         }
 
         if ($what === 'insert') {
@@ -705,12 +698,53 @@ class sqlbuddy
     }
 
     /**
+     * Backtick-quote an identifier, escaping embedded backticks.
+     */
+    private function quote_ident($name)
+    {
+        return '`' . str_replace('`', '``', (string) $name) . '`';
+    }
+
+    /**
+     * Lenient date/time parsing for the date, time and datetime modes.
+     *
+     * Accepts e.g. 2026-11-22 3:32:05, 2026-11-22 10:30, 2026-11-22T10:30:00,
+     * 2026-11-22, 22.11.2026 10:30, 1/2/26. The date part goes through sloppydate().
+     *
+     * @return array [string|null 'Y-m-d', string|null 'H:i:s'] - null when missing or invalid
+     */
+    private function parse_datetime($val)
+    {
+        $val = trim((string) $val);
+        $date = null;
+        $time = null;
+
+        if (preg_match('/^(.*?)[\sT]*(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\.\d+)?$/', $val, $m)) {
+            [$h, $i, $s] = [(int) $m[2], (int) $m[3], (int) ($m[4] ?? 0)];
+            if ($h < 24 and $i < 60 and $s < 60) {
+                $time = sprintf('%02d:%02d:%02d', $h, $i, $s);
+            }
+            $val = trim($m[1]);
+        }
+
+        if ($val !== '') {
+            $p = explode('-', $this->sloppydate($val, 'sql'));
+            if (count($p) === 3 and ctype_digit($p[0] . $p[1] . $p[2]) and checkdate((int) $p[1], (int) $p[2], (int) $p[0])) {
+                $date = sprintf('%04d-%02d-%02d', $p[0], $p[1], $p[2]);
+            }
+        }
+
+        return [$date, $time];
+    }
+
+    /**
      * Force numerical float by fuzzy logic
      *
      * @param {string} $string The number
-     * @return mixed Either an int or float.
+     * @param bool $as_string Return a numeric string instead (no float precision loss)
+     * @return mixed Either an int or float, or a numeric string.
      */
-    public function make_number($string)
+    public function make_number($string, $as_string = false)
     {
         $string = trim(preg_replace("/[A-Za-z]/", "", (string) $string));
 
@@ -726,6 +760,13 @@ class sqlbuddy
         }
 
         $string = str_replace(',', '.', $string);
+
+        if ($as_string and is_numeric($string)) {
+            return $string;
+        }
+        if ($as_string) {
+            return (string) $this->make_number($string);
+        }
 
         $pos = strpos($string, '.');
         if ($pos === false) {
@@ -888,72 +929,35 @@ class sqlbuddy
     }
 
     /**
-     * Kim's (bool) v1.0, last update 27 april 2006
-     * After having so much problems with (bool) and what my own head thought (bool) worked, this
-     * personal class is the only way to go. _bool() will return the logical true/false based on
-     * what you evaluate. You can evaluate whatever.
+     * Kim's (bool) v2 - human logic boolean, case-insensitive.
      *
-     * update 27 april 2006
+     * false: false, null, [], '', whitespace, 'false', 'no', 'off', 'null', '[]', '{}', '0', '00', 0, 0.0
+     * true : objects, non-empty arrays, 'true', 'yes', 'on', non-zero numbers, any other string
      *
-     * @param {mixed} $var Expression to check
-     * @return boolean True or false boolean
+     * @param mixed $var Expression to evaluate
+     * @return bool
      */
-    public function _bool($var, $var_ref = null)
+    public function _bool($var)
     {
-        if ($var_ref == '_SESSION') {
-            if (!isset($_SESSION[$var])) {
-                return false;
-            }
-
-            $var = $_SESSION[$var];
-        }
-
         if (is_bool($var)) {
             return $var;
-        } elseif ($var === null || $var === 'NULL' || $var === 'null') {
-            return false;
-        } elseif (is_string($var)) {
-            $var = trim($var);
-
-            if ($var == 'false') {
-                return false;
-            } elseif ($var == 'true') {
-                return true;
-            } elseif ($var == 'no') {
-                return false;
-            } elseif ($var == 'yes') {
-                return true;
-            } elseif ($var == 'off') {
-                return false;
-            } elseif ($var == 'on') {
-                return true;
-            } elseif ($var == '') {
-                return false;
-            } elseif (ctype_digit($var)) {
-                if ((int) $var) {
-                    return true;
-                } else {
-                    return false;
-                }
-            } else {
-                return true;
-            }
-        } elseif (ctype_digit((string) $var)) {
-            if ((int) $var) {
-                return true;
-            } else {
-                return false;
-            }
-        } elseif (is_array($var)) {
-            if (count($var)) {
-                return true;
-            } else {
-                return false;
-            }
-        } elseif (is_object($var)) {
-            return true;// No reason to (bool) an object, we assume OK for crazy logic
-        } else {
-            return true;// Whatever came though must be something,  OK for crazy logic
         }
+        if (is_array($var)) {
+            return count($var) > 0;
+        }
+        if (is_object($var)) {
+            return true; // An object is always something
+        }
+        if ($var === null) {
+            return false;
+        }
+
+        $lower = strtolower(trim((string) $var));
+
+        return match ($lower) {
+            'false', 'no', 'off', '', 'null', '[]', '{}' => false,
+            'true', 'yes', 'on' => true,
+            default => ctype_digit($lower) ? (int) $lower !== 0 : true,
+        };
     }
 }
